@@ -23,6 +23,10 @@ if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
     )
 endif()
 
+if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "AppleClang")
+    target_compile_options(vcpkg-cache-server PUBLIC -fexperimental-library)
+endif()
+
 # External libraries
 find_package(httplib CONFIG REQUIRED)
 find_package(libzippp CONFIG REQUIRED)

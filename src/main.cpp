@@ -44,7 +44,7 @@ constexpr std::optional<typename Map::mapped_type> mGet(const Map& map, const Ke
 namespace fp {
 
 struct StringHash {
-    using hash_type      = std::hash<std::string_view>;
+    using hash_type = std::hash<std::string_view>;
     using is_transparent = void;
 
     std::size_t operator()(const char* str) const { return hash_type{}(str); }
@@ -55,12 +55,6 @@ struct StringHash {
 template <typename V>
 using UnorderedStringMap = std::unordered_map<std::string, V, StringHash, std::equal_to<>>;
 
-constexpr auto first = [](auto&& pair) -> decltype(auto) {
-    return std::forward<decltype(pair)>(pair).first;
-};
-constexpr auto second = [](auto&& pair) -> decltype(auto) {
-    return std::forward<decltype(pair)>(pair).second;
-};
 constexpr auto isSpace = [](char c) { return std::isspace(c); };
 
 constexpr auto nonSpace = [](auto&& line) { return !std::ranges::all_of(line, isSpace); };
@@ -77,8 +71,8 @@ constexpr auto toPair(char sep) {
 }
 
 constexpr auto splitIntoPairs(char sep1, char sep2) {
-    return std::views::split(sep1) | std::views::filter(nonSpace)
-         | std::views::transform(toPair(sep2));
+    return std::views::split(sep1) | std::views::filter(nonSpace) |
+           std::views::transform(toPair(sep2));
 }
 
 constexpr auto isZipFile = [](const auto& entry) { return entry.path().extension() == ".zip"; };
@@ -95,9 +89,9 @@ constexpr auto tryTransform(F&& func, E&& error) {
                        std::invoke(e, item);
                        return std::nullopt;
                    }
-               })
-         | std::views::filter([](const auto& item) { return item.has_value(); })
-         | std::views::transform([](auto&& optional) { return *optional; });
+               }) |
+           std::views::filter([](const auto& item) { return item.has_value(); }) |
+           std::views::transform([](auto&& optional) { return *optional; });
 }
 
 std::string exceptionToString() {
@@ -284,29 +278,29 @@ Info extractInfo(const std::filesystem::path& path) {
 
     return {.package = mGet(ctrlMap, "Package").value_or("?"),
             .version = mGet(ctrlMap, "Version").value_or("?"),
-            .arch    = mGet(ctrlMap, "Architecture").value_or("?"),
-            .sha     = path.stem().generic_string(),
-            .ctrl    = ctrlMap,
-            .abi     = abiMap,
-            .time    = std::filesystem::last_write_time(path),
-            .size    = std::filesystem::file_size(path)};
+            .arch = mGet(ctrlMap, "Architecture").value_or("?"),
+            .sha = path.stem().generic_string(),
+            .ctrl = ctrlMap,
+            .abi = abiMap,
+            .time = std::filesystem::last_write_time(path),
+            .size = std::filesystem::file_size(path)};
 }
 
 fp::UnorderedStringMap<Info> scan(const std::filesystem::path& path,
                                   std::shared_ptr<spdlog::logger> log) {
-    return std::filesystem::recursive_directory_iterator(path) | std::views::filter(fp::isZipFile)
-         | fp::tryTransform(
+    return std::filesystem::recursive_directory_iterator(path) | std::views::filter(fp::isZipFile) |
+           fp::tryTransform(
                [&](const auto& entry) {
                    log->debug("scan: {}", entry.path().stem().generic_string());
                    return extractInfo(entry.path());
                },
                [&](const auto& entry) {
                    log->error("error scaning {} : {}", entry.path(), fp::exceptionToString());
-               })
-         | std::views::transform([&](auto&& info) {
+               }) |
+           std::views::transform([&](auto&& info) {
                return std::pair<const std::string, Info>{info.sha, info};
-           })
-         | std::ranges::to<fp::UnorderedStringMap<Info>>();
+           }) |
+           std::ranges::to<fp::UnorderedStringMap<Info>>();
 }
 
 class Store {
@@ -342,14 +336,14 @@ public:
     auto allInfos() const { return infos | std::views::values; }
 
     std::string statistics() const {
-        const auto size = std::ranges::fold_left(
-            infos | std::views::values | std::views::transform(&Info::size), 1, std::plus<>{});
-
-        const auto packages = infos | std::views::values | std::views::transform(&Info::package)
-                            | std::ranges::to<std::set>();
+        const auto range = infos | std::views::values | std::views::transform(&Info::size);
+        const auto diskSize =
+            std::accumulate(std::begin(range), std::end(range), size_t{0}, std::plus<>{});
+        const auto packages = infos | std::views::values | std::views::transform(&Info::package) |
+                              std::ranges::to<std::set>();
 
         return std::format("Found {} caches of {} packages. Using {}", infos.size(),
-                           packages.size(), formatByteSize(size));
+                           packages.size(), formatByteSize(diskSize));
     }
 
 protected:
@@ -402,12 +396,12 @@ int main(int argc, char* argv[]) {
 
     try {
         args.parse_args(argc, argv);
-        settings.base       = std::filesystem::path{args.get<std::string>("--cache_dir")};
-        settings.port       = args.get<int>("--port");
-        settings.logLevel   = static_cast<spdlog::level::level_enum>(args.get<int>("--verbosity"));
+        settings.base = std::filesystem::path{args.get<std::string>("--cache_dir")};
+        settings.port = args.get<int>("--port");
+        settings.logLevel = static_cast<spdlog::level::level_enum>(args.get<int>("--verbosity"));
         settings.authTokens = args.get<std::vector<std::string>>("--auth");
-        settings.cert       = std::filesystem::path{args.get<std::string>("--cert")};
-        settings.key        = std::filesystem::path{args.get<std::string>("--key")};
+        settings.cert = std::filesystem::path{args.get<std::string>("--cert")};
+        settings.key = std::filesystem::path{args.get<std::string>("--key")};
 
     } catch (const std::exception& err) {
         std::println("{}\n{}", err.what(), args.help().str());
@@ -446,7 +440,7 @@ int main(int argc, char* argv[]) {
 
         res.set_content_provider(
             info->size, "application/zip",
-            [size = info->size, fstream, buff = std::vector<char>(1024)](
+            [fstream, buff = std::vector<char>(1024)](
                 size_t offset, size_t length, httplib::DataSink& sink) mutable -> bool {
                 buff.resize(length);
                 fstream->seekg(offset);
@@ -482,15 +476,16 @@ int main(int argc, char* argv[]) {
     });
 
     server.Post("/post", [&](const httplib::Request& req, httplib::Response& res) {
-        const auto api     = req.get_file_value("api_file").content;
+        const auto api = req.get_file_value("api_file").content;
         const auto package = req.get_file_value("package").content;
 
         const auto abiMap = api | fp::splitIntoPairs('\n', ' ') | std::ranges::to<std::map>();
 
-        auto matches = store.allInfos()
-                     | std::views::filter([&](const auto& info) { return info.package == package; })
-                     | std::views::transform([&](const auto& info) { return info; })
-                     | std::ranges::to<std::vector>();
+        auto matches =
+            store.allInfos() |
+            std::views::filter([&](const auto& info) { return info.package == package; }) |
+            std::views::transform([&](const auto& info) { return info; }) |
+            std::ranges::to<std::vector>();
         std::ranges::sort(matches, std::less<>{},
                           [&](const auto& info) { return missmatches(info.abi, abiMap); });
 
@@ -498,8 +493,8 @@ int main(int argc, char* argv[]) {
             matches | std::views::take(3) | std::views::transform([&](const auto& info) {
                 return std::format("<div><h3>Time: {:%Y-%m-%d %H:%M:%S} {}</h3>{}</div>", info.time,
                                    info.sha, formatDiff(abiMap, info.abi));
-            })
-            | std::views::join | std::ranges::to<std::string>();
+            }) |
+            std::views::join | std::ranges::to<std::string>();
 
         const auto result = std::format(R"(<h1>Target ABI:</h1><div>{}</div><div>{}</div>)",
                                         formatMap(abiMap), str);
@@ -507,7 +502,7 @@ int main(int argc, char* argv[]) {
         res.set_content(result, "text/html");
     });
 
-    server.Get(R"(/list)", [&](const httplib::Request& req, httplib::Response& res) {
+    server.Get(R"(/list)", [&](const httplib::Request&, httplib::Response& res) {
         const auto keys =
             store.allInfos() | std::views::transform(&Info::package) | std::ranges::to<std::set>();
 
@@ -517,16 +512,17 @@ int main(int argc, char* argv[]) {
 
         const auto str =
             packages | std::views::transform([&](const auto& package) {
-                const auto diskSize = std::ranges::fold_left(
-                    package.second
-                        | std::views::transform([](const auto* item) { return item->size; }),
-                    size_t{0}, std::plus<>{});
+                const auto range = package.second | std::views::transform([](const auto* item) {
+                                       return item->size;
+                                   });
+                const auto diskSize =
+                    std::accumulate(std::begin(range), std::end(range), size_t{0}, std::plus<>{});
 
                 return std::format(
                     R"(<dt><a href="/find/{}"><b>{}</b></a></dt><dd><pre>Count: {:3} Size: {}</pre></dd>)",
                     package.first, package.first, package.second.size(), formatByteSize(diskSize));
-            })
-            | std::views::join | std::ranges::to<std::string>();
+            }) |
+            std::views::join | std::ranges::to<std::string>();
 
         const auto result =
             std::format("{}<h1>Packages</h1><dl>{}</dl>{}", html::pre, str, html::post);
@@ -537,14 +533,14 @@ int main(int argc, char* argv[]) {
         const auto package = req.path_params.at("package");
 
         const auto str =
-            store.allInfos()
-            | std::views::filter([&](const auto& info) { return info.package == package; })
-            | std::views::transform([&](const auto& info) {
-                  return std::format(
-                      R"(<li><a href="/package/{}"><b>{}</b> Version: {} Arch: {} Created: {:%Y-%m-%d %H:%M}</a></li>)",
-                      info.sha, info.package, info.version, info.arch, info.time);
-              })
-            | std::views::join | std::ranges::to<std::string>();
+            store.allInfos() |
+            std::views::filter([&](const auto& info) { return info.package == package; }) |
+            std::views::transform([&](const auto& info) {
+                return std::format(
+                    R"(<li><a href="/package/{}"><b>{}</b> Version: {} Arch: {} Created: {:%Y-%m-%d %H:%M}</a></li>)",
+                    info.sha, info.package, info.version, info.arch, info.time);
+            }) |
+            std::views::join | std::ranges::to<std::string>();
 
         const auto result =
             std::format("{}<h1>Results</h1><ol>{}</ol>{}", html::pre, str, html::post);
@@ -555,25 +551,26 @@ int main(int argc, char* argv[]) {
         const auto sha = req.path_params.at("sha");
 
         const auto str =
-            store.allInfos() | std::views::filter([&](const auto& info) { return info.sha == sha; })
-            | std::views::transform([&](const auto& info) {
-                  return std::format("<h3>{} {} {} Time: {:%Y-%m-%d %H:%M:%S}</h3>{}{}\n",
-                                     info.package, info.version, info.arch, info.time,
-                                     formatMap(info.ctrl), formatMap(info.abi));
-              })
-            | std::views::join | std::ranges::to<std::string>();
+            store.allInfos() |
+            std::views::filter([&](const auto& info) { return info.sha == sha; }) |
+            std::views::transform([&](const auto& info) {
+                return std::format("<h3>{} {} {} Time: {:%Y-%m-%d %H:%M:%S}</h3>{}{}\n",
+                                   info.package, info.version, info.arch, info.time,
+                                   formatMap(info.ctrl), formatMap(info.abi));
+            }) |
+            std::views::join | std::ranges::to<std::string>();
 
         const auto result = std::format("{}<h1>Results</h1>{}{}", html::pre, str, html::post);
         res.set_content(result, "text/html");
     });
 
-    server.set_error_handler([](const httplib::Request& req, httplib::Response& res) {
+    server.set_error_handler([](const httplib::Request&, httplib::Response& res) {
         res.set_content(
             std::format("<p>Error Status: <span style='color:red;'>{}</span></p>", res.status),
             "text/html");
     });
     server.set_exception_handler(
-        [](const httplib::Request& req, httplib::Response& res, std::exception_ptr ep) {
+        [](const httplib::Request&, httplib::Response& res, std::exception_ptr ep) {
             try {
                 std::rethrow_exception(ep);
             } catch (std::exception& e) {
@@ -584,8 +581,7 @@ int main(int argc, char* argv[]) {
             res.status = httplib::StatusCode::InternalServerError_500;
         });
 
-    server.Get("/stop",
-               [&](const httplib::Request& req, httplib::Response& res) { server.stop(); });
+    server.Get("/stop", [&](const httplib::Request&, httplib::Response&) { server.stop(); });
 
     log->info("Start server");
     server.listen("10.245.163.85", 8085);
