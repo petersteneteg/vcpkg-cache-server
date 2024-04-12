@@ -1,4 +1,3 @@
-
 #include <argparse/argparse.hpp>
 #include <httplib.h>
 #include <libzippp.h>
@@ -54,6 +53,7 @@ struct StringHash {
 
 template <typename V>
 using UnorderedStringMap = std::unordered_map<std::string, V, StringHash, std::equal_to<>>;
+using UnorderedStringSet = std::unordered_set<std::string, StringHash, std::equal_to<>>;
 
 constexpr auto isSpace = [](char c) { return std::isspace(c); };
 
@@ -174,7 +174,6 @@ size_t missmatches(const auto& map1, const auto& map2) {
 }
 
 std::string formatDiff(const auto& dstMap, const auto& srcMap) {
-
     auto keys = dstMap | std::views::keys | std::ranges::to<std::set>();
     keys.insert_range(srcMap | std::views::keys);
 
@@ -202,38 +201,38 @@ std::string formatDiff(const auto& dstMap, const auto& srcMap) {
     return buff;
 }
 
-const auto logger = [](const httplib::Request& req, const httplib::Response& res) {
-    spdlog::trace("================================");
-    spdlog::trace("{} {} {}", req.method, req.version, req.path);
-    for (auto it = req.params.begin(); it != req.params.end(); ++it) {
-        spdlog::trace("{}{}={}", (it == req.params.begin()) ? '?' : '&', it->first, it->second);
-    }
-    for (const auto& [key, val] : req.headers) {
-        spdlog::trace("{}: {}", key, val);
-    }
-    for (const auto& [name, file] : req.files) {
-        spdlog::trace("name: {}\n", name);
-        spdlog::trace("filename: {}\n", file.filename);
-        spdlog::trace("content type: {}\n", file.content_type);
-        spdlog::trace("text length: {}\n", file.content.size());
-        spdlog::trace("----------------");
-    }
-    spdlog::trace("--------------------------------");
-    spdlog::trace("{}", res.status);
-    for (const auto& [key, val] : res.headers) {
-        spdlog::trace("{}: {}", key, val);
-    }
-};
+auto logger(std::shared_ptr<spdlog::logger> log) {
+    return [log](const httplib::Request& req, const httplib::Response& res) {
+        log->debug("{} {} {}", req.method, req.version,
+                   mGet(req.headers, "REMOTE_ADDR").value_or("?.?.?.?"), req.path);
+        for (const auto& [key, val] : req.params) {
+            log->trace("{:>20}: {}", key, val);
+        }
+        for (const auto& [key, val] : req.headers) {
+            log->trace("{:>20}: {}", key, val);
+        }
+        for (const auto& [name, file] : req.files) {
+            log->trace("{:>20}: {}", "name", name);
+            log->trace("{:>20}: {}", "filename", file.filename);
+            log->trace("{:>20}: {}", "content type", file.content_type);
+            log->trace("{:>20}: {}", "text length", file.content.size());
+        }
+        log->debug("{:>20}: {}", "response rtatus", res.status);
+        for (const auto& [key, val] : res.headers) {
+            log->trace("{:>20}: {}", key, val);
+        }
+    };
+}
 
 std::string formatByteSize(size_t size) {
     if (size >= 1'000'000'000) {
-        return std::format("{:5.1f}GB", static_cast<double>(size) / 1'000'000'000.0);
+        return std::format("{:5.1f} GB", static_cast<double>(size) / 1'000'000'000.0);
     } else if (size >= 1'000'000) {
-        return std::format("{:5.1f}MB", static_cast<double>(size) / 1'000'000.0);
+        return std::format("{:5.1f} MB", static_cast<double>(size) / 1'000'000.0);
     } else if (size >= 1'000) {
-        return std::format("{:5.1f}kB", static_cast<double>(size) / 1'000.0);
+        return std::format("{:5.1f} kB", static_cast<double>(size) / 1'000.0);
     } else {
-        return std::format("{:4d}B", size);
+        return std::format("{:4d} B", size);
     }
 }
 
@@ -363,17 +362,19 @@ protected:
     fp::UnorderedStringMap<Info> infos;
 };
 
+struct Authorization {
+    fp::UnorderedStringSet write;
+};
 struct Settings {
-    int port = 8085;
+    int port = 443;
     std::filesystem::path base{};
-    spdlog::level::level_enum logLevel = spdlog::level::trace;
-    std::vector<std::string> authTokens{};
-
+    spdlog::level::level_enum logLevel = spdlog::level::debug;
+    Authorization auth{};
     std::filesystem::path cert;
     std::filesystem::path key;
 };
 
-int main(int argc, char* argv[]) {
+Settings parseArgs(int argc, char* argv[]) {
     Settings settings{};
 
     argparse::ArgumentParser args("vcpkg_cache_server");
@@ -403,7 +404,8 @@ int main(int argc, char* argv[]) {
         settings.base = std::filesystem::path{args.get<std::string>("--cache_dir")};
         settings.port = args.get<int>("--port");
         settings.logLevel = static_cast<spdlog::level::level_enum>(args.get<int>("--verbosity"));
-        settings.authTokens = args.get<std::vector<std::string>>("--auth");
+        settings.auth = {.write = fp::UnorderedStringSet{
+                             std::from_range, args.get<std::vector<std::string>>("--auth")}};
         settings.cert = std::filesystem::path{args.get<std::string>("--cert")};
         settings.key = std::filesystem::path{args.get<std::string>("--key")};
 
@@ -412,7 +414,36 @@ int main(int argc, char* argv[]) {
         std::exit(1);
     }
 
-    
+    return settings;
+}
+
+httplib::Server::HandlerWithContentReader authorizeRequest(
+    const Authorization& auth, httplib::Server::HandlerWithContentReader handler) {
+    return [handler, &auth](const httplib::Request& req, httplib::Response& res,
+                            const httplib::ContentReader& content_reader) {
+        if (!req.has_header("Authorization")) {
+            res.set_header("WWW-Authenticate", "Bearer");
+            res.status = httplib::StatusCode::Unauthorized_401;
+            return;
+        }
+
+        const auto authHeader = req.get_header_value("Authorization");
+        auto [scheme, token] = splitByFirst(authHeader);
+        scheme = trim(scheme);
+        token = trim(token);
+
+        if (scheme != "Bearer" || !auth.write.contains(token)) {
+            res.set_header("WWW-Authenticate", "Bearer");
+            res.status = httplib::StatusCode::Forbidden_403;
+            return;
+        }
+
+        handler(req, res, content_reader);
+    };
+}
+
+int main(int argc, char* argv[]) {
+    auto settings = parseArgs(argc, argv);
 
     auto log = spdlog::stdout_color_mt("console");
     spdlog::set_default_logger(log);
@@ -420,59 +451,62 @@ int main(int argc, char* argv[]) {
 
     Store store(settings.base, log);
 
-    //httplib::Server server{};
-    httplib::SSLServer server{settings.cert.generic_string().c_str(), settings.key.generic_string().c_str()};
-    
-    server.set_logger(logger);
+    httplib::SSLServer server{settings.cert.generic_string().c_str(),
+                              settings.key.generic_string().c_str()};
 
-    server.Get(R"(/cache/([0-9a-f]{64}))", [&](const httplib::Request& req,
-                                               httplib::Response& res) {
-        const auto sha = req.matches[1].str();
+    server.set_logger(logger(log));
 
-        if (!store.exists(sha)) {
-            res.status = httplib::StatusCode::NotFound_404;
-            return;
-        }
-        const auto* info = store.info(sha);
+    server.Get(
+        R"(/cache/([0-9a-f]{64}))", [&](const httplib::Request& req, httplib::Response& res) {
+            const auto sha = req.matches[1].str();
 
-        log->info(std::format(
-            "{:15} {:5}: {:30} v{:<11} {:15} Size: {:10} Time: {:%Y-%m-%d %H:%M} Auth {} Sha: {} ",
-            mGet(req.headers, "REMOTE_ADDR").value_or("?"), req.method, info->package,
-            info->version, info->arch, formatByteSize(info->size), info->time,
-            mGet(req.headers, "Authorization").value_or("-"), sha));
+            if (!store.exists(sha)) {
+                res.status = httplib::StatusCode::NotFound_404;
+                return;
+            }
+            const auto* info = store.info(sha);
 
-        auto fstream = store.read(sha);
+            log->info(std::format(
+                "{:15} {:5}: {:30} v{:<11} {:15} Size: {:10} Time: {:%Y-%m-%d %H:%M} Auth {} "
+                "Sha: {} ",
+                mGet(req.headers, "REMOTE_ADDR").value_or("?"), req.method, info->package,
+                info->version, info->arch, formatByteSize(info->size), info->time,
+                mGet(req.headers, "Authorization").value_or("-"), sha));
 
-        res.set_content_provider(
-            info->size, "application/zip",
-            [fstream, buff = std::vector<char>(1024)](size_t offset, size_t length,
-                                                      httplib::DataSink& sink) mutable -> bool {
-                buff.resize(length);
-                fstream->seekg(offset);
-                fstream->read(buff.data(), length);
-                sink.write(buff.data(), length);
+            auto fstream = store.read(sha);
+
+            res.set_content_provider(
+                info->size, "application/zip",
+                [fstream, buff = std::vector<char>(1024)](size_t offset, size_t length,
+                                                          httplib::DataSink& sink) mutable -> bool {
+                    buff.resize(length);
+                    fstream->seekg(offset);
+                    fstream->read(buff.data(), length);
+                    sink.write(buff.data(), length);
+                    return true;
+                });
+        });
+
+    server.Put(
+        "/cache/([0-9a-f]{64})",
+        authorizeRequest(settings.auth, [&](const httplib::Request& req, httplib::Response& res,
+                                            const httplib::ContentReader& content_reader) {
+            auto sha = req.matches[1].str();
+            if (store.exists(sha)) {
+                res.status = httplib::StatusCode::Conflict_409;
+                return;
+            }
+
+            log->info(std::format("{:15} {:5}:  Auth {} Sha: {} ",
+                                  mGet(req.headers, "REMOTE_ADDR").value_or("?"), req.method,
+                                  mGet(req.headers, "Authorization").value_or("-"), sha));
+
+            auto fstream = store.write(sha);
+            content_reader([fstream](const char* data, size_t data_length) {
+                fstream->write(data, data_length);
                 return true;
             });
-    });
-
-    server.Put("/cache/([0-9a-f]{64})", [&](const httplib::Request& req, httplib::Response& res,
-                                            const httplib::ContentReader& content_reader) {
-        auto sha = req.matches[1].str();
-        if (store.exists(sha)) {
-            res.status = httplib::StatusCode::Conflict_409;
-            return;
-        }
-
-        log->info(std::format("{:15} {:5}:  Auth {} Sha: {} ",
-                              mGet(req.headers, "REMOTE_ADDR").value_or("?"), req.method,
-                              mGet(req.headers, "Authorization").value_or("-"), sha));
-
-        auto fstream = store.write(sha);
-        content_reader([fstream](const char* data, size_t data_length) {
-            fstream->write(data, data_length);
-            return true;
-        });
-    });
+        }));
 
     server.Get("/query", [](const httplib::Request&, httplib::Response& res) {
         res.set_content(std::format(R"({}{}<div id="result"></div>{}{})", html::pre, html::form,
