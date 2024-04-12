@@ -373,16 +373,13 @@ struct Settings {
     std::filesystem::path key;
 };
 
-constexpr std::string_view base =
-    "C:/Users/petst55.AD/OneDrive - Link\u00F6pings universitet/Cache/vcpkg-cache";
-
 int main(int argc, char* argv[]) {
     Settings settings{};
 
     argparse::ArgumentParser args("vcpkg_cache_server");
 
     args.add_argument("--cache_dir")
-        .default_value(std::string{base})
+        .required()
         .help("Directory where to read and write cache")
         .metavar("DIR");
     args.add_argument("--port")
@@ -415,16 +412,17 @@ int main(int argc, char* argv[]) {
         std::exit(1);
     }
 
-    // httplib::SSLServer server{};
+    
 
     auto log = spdlog::stdout_color_mt("console");
     spdlog::set_default_logger(log);
     log->set_level(settings.logLevel);
 
-    Store store(base, log);
+    Store store(settings.base, log);
 
-    httplib::Server server{};
-
+    //httplib::Server server{};
+    httplib::SSLServer server{settings.cert.generic_string().c_str(), settings.key.generic_string().c_str()};
+    
     server.set_logger(logger);
 
     server.Get(R"(/cache/([0-9a-f]{64}))", [&](const httplib::Request& req,
@@ -595,5 +593,5 @@ int main(int argc, char* argv[]) {
     server.Get("/stop", [&](const httplib::Request&, httplib::Response&) { server.stop(); });
 
     log->info("Start server");
-    server.listen("10.245.163.85", 8085);
+    server.listen("0.0.0.0", settings.port);
 }

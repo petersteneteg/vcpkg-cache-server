@@ -47,11 +47,19 @@
       }
     },
     {
-      "name": "xcode-developer",
-      "displayName": "Xcode Developer configuration",
+      "name": "xcode-developer-arm64",
+      "displayName": "Xcode Developer configuration arm64",
       "inherits" : ["xcode", "developer", "vcpkg", "build"],
       "cacheVariables": {
         "VCPKG_TARGET_TRIPLET" : "arm64-osx"
+      }
+    },
+    {
+      "name": "xcode-developer-x64",
+      "displayName": "Xcode Developer configuration x64",
+      "inherits" : ["xcode", "developer", "vcpkg", "build"],
+      "cacheVariables": {
+        "VCPKG_TARGET_TRIPLET" : "x64-osx"
       }
     },
     {
