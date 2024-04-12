@@ -1,0 +1,66 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": { "major": 3, "minor": 26, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "vcpkg",
+      "hidden": true,
+      "toolchainFile": "${sourceParentDir}/vcpkg/scripts/buildsystems/vcpkg.cmake"
+    },
+    {
+      "name" : "build",
+      "hidden" : true,
+      "binaryDir" : "${sourceParentDir}/builds/vcpkg-cache-server-${presetName}"
+    },
+    {
+      "name": "msvc",
+      "hidden": true,
+      "generator": "Visual Studio 17 2022",
+      "architecture" : "x64"
+    },
+    {
+      "name": "xcode",
+      "hidden": true,
+      "generator": "Xcode"
+    },
+    {
+      "name": "ninja",
+      "hidden": true,
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE" : "RelWithDebInfo"
+      }
+    },
+    {
+      "name": "developer",
+      "hidden": true,
+      "cacheVariables": {
+        "BUILD_SHARED_LIBS": { "type": "BOOL", "value": "OFF"}
+      }
+    },
+    {
+      "name": "msvc-developer",
+      "displayName": "MSVC Developer configuration",
+      "inherits" : ["msvc", "developer", "vcpkg", "build"],
+      "cacheVariables": {
+        "VCPKG_TARGET_TRIPLET" : "x64-windows-static"
+      }
+    },
+    {
+      "name": "xcode-developer",
+      "displayName": "Xcode Developer configuration",
+      "inherits" : ["xcode", "developer", "vcpkg", "build"],
+      "cacheVariables": {
+        "VCPKG_TARGET_TRIPLET" : "arm64-osx"
+      }
+    },
+    {
+      "name": "ninja-developer",
+      "displayName": "Ninja Developer configuration",
+      "inherits" : ["ninja", "developer", "vcpkg", "build"],
+      "cacheVariables": {
+        "VCPKG_TARGET_TRIPLET" : "x64-linux"
+      }
+    }
+  ]
+}

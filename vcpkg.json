@@ -1,0 +1,19 @@
+{
+  "name": "vcpkg-cache-server",
+  "version-string": "0.0.1",
+  "homepage": "https://github.com/petersteneteg/vcpkg-cache-server",
+  "license": "BSD-3-Clause",
+  "vcpkg-configuration": {
+    "default-registry": {
+      "kind": "builtin",
+      "baseline": "582a4de14bef91df217f4f49624cf5b2b04bd7ca"
+    }
+  },
+  "dependencies": [
+    { "name": "cpp-httplib", "features": ["brotli", "openssl", "zlib"] },
+    { "name": "openssl", "features": ["tools"] },
+    "libzippp",
+    "spdlog",
+    "argparse"
+  ]
+}
