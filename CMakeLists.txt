@@ -4,10 +4,22 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-add_executable(vcpkg-cache-server
-    src/main.cpp
-    utf.manifest
+add_executable(vcpkg-cache-server)
+target_sources(vcpkg-cache-server
+    PUBLIC FILE_SET HEADERS TYPE HEADERS BASE_DIRS include FILES
+        include/vcpkg-cache-server/settings.hpp
+        include/vcpkg-cache-server/functional.hpp
+        include/vcpkg-cache-server/store.hpp
+        include/vcpkg-cache-server/site.hpp
+    PRIVATE
+        src/settings.cpp
+        src/functional.cpp
+        src/store.cpp
+        src/site.cpp
+        src/main.cpp
+        utf.manifest
 )
+
 
 target_include_directories(vcpkg-cache-server PUBLIC "include")
 target_compile_options(vcpkg-cache-server PUBLIC
