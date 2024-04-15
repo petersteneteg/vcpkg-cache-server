@@ -75,17 +75,20 @@ httplib::Server::HandlerWithContentReader authorizeRequest(
 
 std::shared_ptr<spdlog::logger> createLog(spdlog::level::level_enum logLevel,
                                           const std::optional<std::filesystem::path>& logFile) {
-    auto consoleSink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
-    consoleSink->set_level(logLevel);
-
     if (logFile) {
+        auto consoleSink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
+        consoleSink->set_level(logLevel);
         auto fileSink =
             std::make_shared<spdlog::sinks::basic_file_sink_mt>(logFile->generic_string(), false);
         fileSink->set_level(spdlog::level::trace);
-        return std::make_shared<spdlog::logger>("log",
-                                                spdlog::sinks_init_list{consoleSink, fileSink});
+        auto log =
+            std::make_shared<spdlog::logger>("log", spdlog::sinks_init_list{consoleSink, fileSink});
+        log->set_level(spdlog::level::trace);
+        return log;
     } else {
-        return std::make_shared<spdlog::logger>("log", consoleSink);
+        auto log = spdlog::stdout_color_mt("log");
+        log->set_level(logLevel);
+        return log;
     }
 }
 
