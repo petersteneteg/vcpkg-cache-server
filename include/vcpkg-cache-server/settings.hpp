@@ -13,12 +13,13 @@ struct Authorization {
 };
 
 struct Settings {
-    int port = 443;
-    std::filesystem::path base{};
-    spdlog::level::level_enum logLevel = spdlog::level::debug;
+    std::filesystem::path cacheDir{};
+    spdlog::level::level_enum logLevel = spdlog::level::info;
     Authorization auth{};
-    std::filesystem::path cert;
-    std::filesystem::path key;
+    std::optional<std::pair<std::filesystem::path,std::filesystem::path>> certAndKey = std::nullopt;
+    int port;
+    std::string host = "0.0.0.0";
+    std::optional<std::filesystem::path> logFile = std::nullopt;
 };
 
 Settings parseArgs(int argc, char* argv[]);
