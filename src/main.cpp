@@ -102,6 +102,15 @@ std::unique_ptr<httplib::Server> createServer(
     }
 }
 
+std::string logCache(const httplib::Request& req, const Info& info) {
+    return std::format(
+        "{:5} {:15} {:30} v{:<11} {:15} Size: {:10} Created: {:%Y-%m-%d %H:%M} "
+        "Sha: {} Auth {}",
+        req.method, fp::mGet(req.headers, "REMOTE_ADDR").value_or("?.?.?.?"), info.package,
+        info.version, info.arch, ByteSize{info.size}, info.time, info.sha,
+        fp::mGet(req.headers, "Authorization").value_or("-"));
+}
+
 }  // namespace vcache
 
 int main(int argc, char* argv[]) {
@@ -113,34 +122,27 @@ int main(int argc, char* argv[]) {
     auto server = createServer(settings.certAndKey);
     server->set_logger(logger(log));
 
-    server->Get(
-        R"(/cache/([0-9a-f]{64}))", [&](const httplib::Request& req, httplib::Response& res) {
-            const auto sha = req.matches[1].str();
+    server->Get(R"(/cache/([0-9a-f]{64}))",
+                [&](const httplib::Request& req, httplib::Response& res) {
+                    const auto sha = req.matches[1].str();
+                    if (!store.exists(sha)) {
+                        res.status = httplib::StatusCode::NotFound_404;
+                        return;
+                    }
+                    const auto* info = store.info(sha);
+                    log->info(logCache(req, *info));
 
-            if (!store.exists(sha)) {
-                res.status = httplib::StatusCode::NotFound_404;
-                return;
-            }
-            const auto* info = store.info(sha);
-
-            log->info(std::format(
-                "{:5} {:15} {:30} v{:<11} {:15} Size: {:10} Time: {:%Y-%m-%d %H:%M} Auth {} "
-                "Sha: {} ",
-                req.method, fp::mGet(req.headers, "REMOTE_ADDR").value_or("?"), info->package,
-                info->version, info->arch, ByteSize{info->size}, info->time,
-                fp::mGet(req.headers, "Authorization").value_or("-"), sha));
-
-            res.set_content_provider(
-                info->size, "application/zip",
-                [fstream = store.read(sha), buff = std::vector<char>(1024)](
-                    size_t offset, size_t length, httplib::DataSink& sink) mutable -> bool {
-                    buff.resize(length);
-                    fstream->seekg(offset);
-                    fstream->read(buff.data(), length);
-                    sink.write(buff.data(), length);
-                    return true;
+                    res.set_content_provider(
+                        info->size, "application/zip",
+                        [fstream = store.read(sha), buff = std::vector<char>(1024)](
+                            size_t offset, size_t length, httplib::DataSink& sink) mutable -> bool {
+                            buff.resize(length);
+                            fstream->seekg(offset);
+                            fstream->read(buff.data(), length);
+                            sink.write(buff.data(), length);
+                            return true;
+                        });
                 });
-        });
 
     server->Put(
         "/cache/([0-9a-f]{64})",
@@ -152,14 +154,13 @@ int main(int argc, char* argv[]) {
                 return;
             }
 
-            log->info(std::format("{:5} {:15} Auth: {} Sha: {} ",
-                                  fp::mGet(req.headers, "REMOTE_ADDR").value_or("?"), req.method,
-                                  fp::mGet(req.headers, "Authorization").value_or("-"), sha));
-
             content_reader([fstream = store.write(sha)](const char* data, size_t data_length) {
                 fstream->write(data, data_length);
                 return true;
             });
+
+            const auto* info = store.info(sha);
+            log->info(logCache(req, *info));
         }));
 
     server->Get("/match", [](const httplib::Request&, httplib::Response& res) {
