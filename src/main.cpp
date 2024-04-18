@@ -154,13 +154,20 @@ int main(int argc, char* argv[]) {
                 return;
             }
 
-            content_reader([fstream = store.write(sha)](const char* data, size_t data_length) {
-                fstream->write(data, data_length);
-                return true;
-            });
+            {
+                auto fstream = store.write(sha);
+                content_reader([fstream](const char* data, size_t data_length) {
+                    fstream->write(data, data_length);
+                    return true;
+                });
+                fstream->close();
+            }
 
-            const auto* info = store.info(sha);
-            log->info(logCache(req, *info));
+            if (const auto* info = store.info(sha)) {
+                log->info(logCache(req, *info));
+            } else {
+                log->warn("Expected to find a new package at {}", sha);
+            }
         }));
 
     server->Get("/match", [](const httplib::Request&, httplib::Response& res) {
