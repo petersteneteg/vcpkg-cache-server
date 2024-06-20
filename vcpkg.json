@@ -6,7 +6,7 @@
   "vcpkg-configuration": {
     "default-registry": {
       "kind": "builtin",
-      "baseline": "582a4de14bef91df217f4f49624cf5b2b04bd7ca"
+      "baseline": "9b61080abc3e4d9e9a8639824ccabe76f0636817"
     }
   },
   "dependencies": [
@@ -14,6 +14,7 @@
     { "name": "openssl", "features": ["tools"] },
     "libzippp",
     "spdlog",
-    "argparse"
+    "argparse",
+    "yaml-cpp"
   ]
 }

@@ -48,6 +48,13 @@ auto logger(std::shared_ptr<spdlog::logger> log) {
     };
 }
 
+std::pair<std::string_view, std::string_view> parseAuthHeader(std::string_view authHeader) {
+    auto [scheme, token] = fp::splitByFirst(authHeader);
+    scheme = fp::trim(scheme);
+    token = fp::trim(token);
+    return {scheme, token};
+}
+
 httplib::Server::HandlerWithContentReader authorizeRequest(
     const Authorization& auth, httplib::Server::HandlerWithContentReader handler) {
     return [handler, &auth](const httplib::Request& req, httplib::Response& res,
@@ -59,9 +66,7 @@ httplib::Server::HandlerWithContentReader authorizeRequest(
         }
 
         const auto authHeader = req.get_header_value("Authorization");
-        auto [scheme, token] = fp::splitByFirst(authHeader);
-        scheme = fp::trim(scheme);
-        token = fp::trim(token);
+        const auto [scheme, token] = parseAuthHeader(authHeader);
 
         if (scheme != "Bearer" || !auth.write.contains(token)) {
             res.set_header("WWW-Authenticate", "Bearer");
@@ -102,13 +107,19 @@ std::unique_ptr<httplib::Server> createServer(
     }
 }
 
-std::string logCache(const httplib::Request& req, const Info& info) {
+std::string logCache(const httplib::Request& req, const Info& info, const Authorization& auth) {
+    const auto authHeader = fp::mGet(req.headers, "Authorization");
+    const auto [scheme, token] =
+        authHeader.transform(parseAuthHeader)
+            .value_or(std::pair<std::string_view, std::string_view>{"-", "-"});
+
+    const auto user = mGet(auth.write, token).value_or("-");
+
     return std::format(
         "{:5} {:15} {:30} v{:<11} {:15} Size: {:10} Created: {:%Y-%m-%d %H:%M} "
-        "Sha: {} Auth {}",
+        "Sha: {} Auth {} User {}",
         req.method, fp::mGet(req.headers, "REMOTE_ADDR").value_or("?.?.?.?"), info.package,
-        info.version, info.arch, ByteSize{info.size}, info.time, info.sha,
-        fp::mGet(req.headers, "Authorization").value_or("-"));
+        info.version, info.arch, ByteSize{info.size}, info.time, info.sha, token, user);
 }
 
 }  // namespace vcache
@@ -130,7 +141,7 @@ int main(int argc, char* argv[]) {
                         return;
                     }
                     const auto* info = store.info(sha);
-                    log->info(logCache(req, *info));
+                    log->info(logCache(req, *info, settings.auth));
 
                     res.set_content_provider(
                         info->size, "application/zip",
@@ -164,7 +175,7 @@ int main(int argc, char* argv[]) {
             }
 
             if (const auto* info = store.info(sha)) {
-                log->info(logCache(req, *info));
+                log->info(logCache(req, *info, settings.auth));
             } else {
                 log->warn("Expected to find a new package at {}", sha);
             }
@@ -177,6 +188,10 @@ int main(int argc, char* argv[]) {
         const auto abi = req.get_file_value("abi_file").content;
         const auto package = req.get_file_value("package").content;
         res.set_content(site::match(abi, package, store), "text/html");
+    });
+    server->Post("/compare/:sha", [&](const httplib::Request& req, httplib::Response& res) {
+        const auto sha = req.path_params.at("sha");
+        res.set_content(site::compare(sha, store), "text/html");
     });
     server->Get(R"(/list)", [&](const httplib::Request&, httplib::Response& res) {
         res.set_content(site::list(store), "text/html");

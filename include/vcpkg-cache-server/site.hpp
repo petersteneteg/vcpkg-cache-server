@@ -9,6 +9,7 @@ class Store;
 namespace site {
 
 std::string match();
+std::string compare(std::string_view sha, const Store& store);
 std::string match(std::string_view abi, std::string_view package, const Store& store);
 std::string list(const Store& store);
 std::string find(std::string_view package, const Store& store);

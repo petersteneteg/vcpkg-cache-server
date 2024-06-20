@@ -36,6 +36,7 @@ public:
     bool exists(std::string_view sha) const;
 
     const Info* info(std::string_view sha);
+    const Info* info(std::string_view sha) const;
 
     std::shared_ptr<std::ifstream> read(std::string_view sha);
 

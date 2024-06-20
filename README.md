@@ -10,7 +10,8 @@ Usage: vcpkg_cache_server [--help] [--version] --cache_dir DIR [--port PORT] [--
 Optional arguments:
   -h, --help       shows help message and exits
   -v, --version    prints version information and exits
-  --cache_dir DIR  Directory where to read and write cache [required]
+  --config FILE    Config file, yaml config file.
+  --cache_dir DIR  Directory where to read and write cache
   --port PORT      Port to listen to, defaults to 80 or 443
   --host           Host to listen to [nargs=0..1] [default: "0.0.0.0"]
   --verbosity      Verbosity level 0 (All) to 6 (Off) [nargs=0..1] [default: 2]
@@ -50,3 +51,18 @@ The server also support a primitive set of queries against the cache to
 * `/find/<package name>` list all caches for a specific package
 * `/package/<sha>` list information about a specific cache entry
 
+
+## Config file format
+```yaml
+cache_dir: <some path>
+port: 442
+host: 0.0.0.0
+verbosity: 2
+log_file: <some path>
+ssl:
+    cert: <path to cert file>
+    key: <path to key file>
+auth:
+    <token1> : <username1>
+    <token2> : <username2>
+```

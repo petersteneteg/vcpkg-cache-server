@@ -35,6 +35,13 @@ const Info* Store::info(std::string_view sha) {
         return nullptr;
     }
 }
+const Info* Store::info(std::string_view sha) const {
+    if (auto it = infos.find(sha); it != infos.end()) {
+        return &it->second;
+    } else {
+        return nullptr;
+    }
+}
 
 std::shared_ptr<std::ifstream> Store::read(std::string_view sha) {
     return std::make_shared<std::ifstream>(shaToPath(sha),

@@ -51,7 +51,7 @@ constexpr std::string_view script = R"(
       method: 'POST',
       body: new FormData(formElem)
     });
-    
+
     result.innerHTML = await res.text();
   };
 </script>
@@ -108,14 +108,37 @@ std::string formatDiff(const auto& dstMap, const auto& srcMap) {
     return buff;
 }
 
-std::string formatMap(auto&& range) {
-    std::string buff;
+void formatMapTo(const auto& range, std::string& buff) {
     std::format_to(std::back_inserter(buff), "<dl>\n");
     for (const auto& [key, val] : range) {
         std::format_to(std::back_inserter(buff), "<dt>{}</dt>\n", key);
         std::format_to(std::back_inserter(buff), "<dd>{}</dd>\n", val);
     }
     std::format_to(std::back_inserter(buff), "</dl>\n");
+}
+
+std::string formatMap(const auto& range) {
+    std::string buff;
+    formatMapTo(range, buff);
+    return buff;
+}
+
+void formatInfoTo(const Info& info, std::string& buff) {
+    std::format_to(std::back_inserter(buff),
+                   "<h2>{}</h2><dl>"
+                   "<dt>Version:</dt><dd>{}</dd>"
+                   "<dt>Arch:</dt><dd>{}</dd>"
+                   "<dt>Created:</dt><dd>{:%Y-%m-%d %H:%M:%S}</dd>"
+                   "<dt>Size:</dt><dd>{}</dd>"
+                   "</dl>\n",
+                   info.package, info.version, info.arch, info.time, ByteSize{info.size});
+    formatMapTo(info.ctrl, buff);
+    formatMapTo(info.abi, buff);
+}
+
+std::string formatInfo(const Info& info) {
+    std::string buff;
+    formatInfoTo(info, buff);
     return buff;
 }
 
@@ -123,8 +146,10 @@ std::string formatMap(auto&& range) {
 
 namespace site {
 
-std::string match(){return std::format(R"({}{}<div id="result"></div>{}{})", html::pre, html::form,
-                                       html::script, html::post);}
+std::string match() {
+    return std::format(R"({}{}<div id="result"></div>{}{})", html::pre, html::form, html::script,
+                       html::post);
+}
 
 std::string match(std::string_view abi, std::string_view package, const Store& store) {
 
@@ -144,6 +169,33 @@ std::string match(std::string_view abi, std::string_view package, const Store& s
                      std::views::join | std::ranges::to<std::string>();
 
     return std::format(R"(<h1>Target ABI:</h1><div>{}</div><div>{}</div>)", formatMap(abiMap), str);
+}
+
+std::string compare(std::string_view sha, const Store& store) {
+    const auto* targetInfo = store.info(sha);
+    if (!targetInfo) {
+        return std::format("{}<h1>Error</h1><div>Sha: {} not found</div>", html::pre, sha,
+                           html::post);
+    }
+
+    const auto& abiMap = targetInfo->abi;
+    const auto& package = targetInfo->package;
+
+    auto matches = store.allInfos() |
+                   std::views::filter([&](const auto& info) { return info.package == package; }) |
+                   std::views::transform([&](const auto& info) { return info; }) |
+                   std::ranges::to<std::vector>();
+    std::ranges::sort(matches, std::less<>{},
+                      [&](const auto& info) { return missmatches(info.abi, abiMap); });
+
+    const auto str = matches | std::views::take(3) | std::views::transform([&](const auto& info) {
+                         return std::format("<div><h3>Time: {:%Y-%m-%d %H:%M:%S} {}</h3>{}</div>",
+                                            info.time, info.sha, formatDiff(abiMap, info.abi));
+                     }) |
+                     std::views::join | std::ranges::to<std::string>();
+
+    return std::format(R"({}{}<div>{}</div>{})", html::pre, formatInfo(*targetInfo), str,
+                       html::post);
 }
 
 std::string list(const Store& store) {
@@ -168,7 +220,8 @@ std::string list(const Store& store) {
         }) |
         std::views::join | std::ranges::to<std::string>();
 
-    return std::format("{}<h1>Packages</h1><dl>{}</dl>{}", html::pre, str, html::post);
+    return std::format("{}<h1>Packages</h1><div>{}</div><dl>{}</dl>{}", html::pre,
+                       store.statistics(), str, html::post);
 }
 
 std::string find(std::string_view package, const Store& store) {
@@ -176,26 +229,33 @@ std::string find(std::string_view package, const Store& store) {
                      std::views::filter([&](const auto& info) { return info.package == package; }) |
                      std::views::transform([&](const auto& info) {
                          return std::format(
-                             "<li><a href=\"/package/{}\"><b>{}</b> Version: {} Arch: {} Created: "
-                             "{:%Y-%m-%d %H:%M}</a></li>",
-                             info.sha, info.package, info.version, info.arch, info.time);
+                             "<li><a href=\"/package/{}\"><pre>Version: {:10} Arch: {:25} "
+                             "Size: {:14} Created: {:%Y-%m-%d %H:%M}</pre></a>"
+                             "SHA: <a href=\"/compare/{}\">{}</a></li>",
+                             info.sha, info.version, info.arch, ByteSize{info.size}, info.time,
+                             info.sha, info.sha);
                      }) |
                      std::views::join | std::ranges::to<std::string>();
 
-    return std::format("{}<h1>Results</h1><ol>{}</ol>{}", html::pre, str, html::post);
+    const auto sizes =
+        store.allInfos() |
+        std::views::filter([&](const auto& info) { return info.package == package; }) |
+        std::views::transform(&Info::size) | std::ranges::to<std::vector>();
+
+    const auto count = sizes.size();
+    const auto diskSize = std::accumulate(sizes.begin(), sizes.end(), size_t{0}, std::plus<>());
+
+    return std::format("{}<h1>{}</h1>Count: {}, Total Size: {}\n<ol>{}</ol>{}", html::pre, package,
+                       count, ByteSize{diskSize}, str, html::post);
 }
 
 std::string sha(std::string_view sha, const Store& store) {
-    const auto str = store.allInfos() |
-                     std::views::filter([&](const auto& info) { return info.sha == sha; }) |
-                     std::views::transform([&](const auto& info) {
-                         return std::format("<h3>{} {} {} Time: {:%Y-%m-%d %H:%M:%S}</h3>{}{}\n",
-                                            info.package, info.version, info.arch, info.time,
-                                            formatMap(info.ctrl), formatMap(info.abi));
-                     }) |
-                     std::views::join | std::ranges::to<std::string>();
-
-    return std::format("{}<h1>Results</h1>{}{}", html::pre, str, html::post);
+    const auto* info = store.info(sha);
+    if (!info) {
+        return std::format("{}<h1>Error</h1><div>Sha: {} not found</div>", html::pre, sha,
+                           html::post);
+    }
+    return std::format("{}{}{}", html::pre, formatInfo(*info), html::post);
 }
 
 std::string favicon() { return std::string{html::favicon}; }
