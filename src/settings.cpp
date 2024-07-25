@@ -33,8 +33,8 @@ void parseConfig(const std::filesystem::path& configFile, Settings& settings) {
     if (config["ssl"]) {
         const auto ssl = config["ssl"];
         if (ssl["cert"] && ssl["key"]) {
-            settings.certAndKey = {std::filesystem::path{config["cert"].as<std::string>()},
-                                   std::filesystem::path{config["key"].as<std::string>()}};
+            settings.certAndKey = {std::filesystem::path{ssl["cert"].as<std::string>()},
+                                   std::filesystem::path{ssl["key"].as<std::string>()}};
         } else {
             throw std::runtime_error(
                 "Error parsing config file: cert and key has to be passed together");

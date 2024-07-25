@@ -30,6 +30,9 @@ dd {
   grid-column-start: 2;
   padding: 1pt 5pt 1pt 5pt;
 }
+pre {
+  display: inline;
+}
 </style></head>
 <body>)";
 
@@ -182,13 +185,14 @@ std::string compare(std::string_view sha, const Store& store) {
     const auto& package = targetInfo->package;
 
     auto matches = store.allInfos() |
+                   std::views::filter([&](const auto& info) { return info.sha != sha; }) |
                    std::views::filter([&](const auto& info) { return info.package == package; }) |
                    std::views::transform([&](const auto& info) { return info; }) |
                    std::ranges::to<std::vector>();
     std::ranges::sort(matches, std::less<>{},
                       [&](const auto& info) { return missmatches(info.abi, abiMap); });
 
-    const auto str = matches | std::views::take(3) | std::views::transform([&](const auto& info) {
+    const auto str = matches | std::views::take(5) | std::views::transform([&](const auto& info) {
                          return std::format("<div><h3>Time: {:%Y-%m-%d %H:%M:%S} {}</h3>{}</div>",
                                             info.time, info.sha, formatDiff(abiMap, info.abi));
                      }) |
@@ -225,15 +229,21 @@ std::string list(const Store& store) {
 }
 
 std::string find(std::string_view package, const Store& store) {
-    const auto str = store.allInfos() |
-                     std::views::filter([&](const auto& info) { return info.package == package; }) |
+    auto list = store.allInfos() |
+                std::views::filter([&](const auto& info) { return info.package == package; }) |
+                std::ranges::to<std::vector>();
+    
+    std::ranges::sort(list, std::greater<>{}, &Info::time);
+    
+    const auto str = list |
                      std::views::transform([&](const auto& info) {
                          return std::format(
-                             "<li><a href=\"/package/{}\"><pre>Version: {:10} Arch: {:25} "
-                             "Size: {:14} Created: {:%Y-%m-%d %H:%M}</pre></a>"
-                             "SHA: <a href=\"/compare/{}\">{}</a></li>",
-                             info.sha, info.version, info.arch, ByteSize{info.size}, info.time,
-                             info.sha, info.sha);
+                             "<li><pre>Version: {:10} Arch: {:25} "
+                             "Size: {:14} Created: {:%Y-%m-%d %H:%M} "
+                             "SHA: </pre><a href=\"/package/{}\"><pre>{}</pre></a>"
+                             "<a href=\"/compare/{}\"><pre> diff</pre></a></li>",
+                             info.version, info.arch, ByteSize{info.size}, info.time,
+                             info.sha, info.sha, info.sha);
                      }) |
                      std::views::join | std::ranges::to<std::string>();
 

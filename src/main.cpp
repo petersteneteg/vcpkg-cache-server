@@ -189,7 +189,7 @@ int main(int argc, char* argv[]) {
         const auto package = req.get_file_value("package").content;
         res.set_content(site::match(abi, package, store), "text/html");
     });
-    server->Post("/compare/:sha", [&](const httplib::Request& req, httplib::Response& res) {
+    server->Get("/compare/:sha", [&](const httplib::Request& req, httplib::Response& res) {
         const auto sha = req.path_params.at("sha");
         res.set_content(site::compare(sha, store), "text/html");
     });

@@ -77,7 +77,8 @@ fp::UnorderedStringMap<Info> scan(const std::filesystem::path& path,
                    return extractInfo(entry.path());
                },
                [&](const auto& entry) {
-                   log->error("error scaning {} : {}", entry.path(), fp::exceptionToString());
+                   log->error("error scaning {} : {}, removing entry", entry.path(), fp::exceptionToString());
+                   std::filesystem::remove(entry.path());
                }) |
            std::views::transform([&](auto&& info) {
                return std::pair<const std::string, Info>{info.sha, info};
