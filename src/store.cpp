@@ -24,41 +24,72 @@ bool Store::exists(std::string_view sha) const {
 }
 
 const Info* Store::info(std::string_view sha) {
-    if (auto it = infos.find(sha); it != infos.end()) {
-        return &it->second;
-    } else {
-        const auto path = shaToPath(sha);
-        if (std::filesystem::is_regular_file(path)) {
-            auto info = extractInfo(path);
-            return &infos.emplace(info.sha, info).first->second;
+    {
+        std::shared_lock lock{smtx};
+        if (auto it = infos.find(sha); it != infos.end() && it->second.first == InfoState::Valid) {
+            return &it->second.second;
         }
-        return nullptr;
     }
+
+    const auto path = shaToPath(sha);
+    if (std::filesystem::is_regular_file(path)) {
+        const auto info = extractInfo(path);
+
+        std::scoped_lock lock{smtx};
+        auto [it, inserted] = infos.try_emplace(info.sha, InfoState::Valid, info);
+        return &it->second.second;
+    }
+
+    return nullptr;
 }
 const Info* Store::info(std::string_view sha) const {
-    if (auto it = infos.find(sha); it != infos.end()) {
-        return &it->second;
+    std::shared_lock<std::shared_mutex> lock{smtx};
+    if (auto it = infos.find(sha); it != infos.end() && it->second.first == InfoState::Valid) {
+        return &it->second.second;
     } else {
         return nullptr;
     }
 }
 
-std::shared_ptr<std::ifstream> Store::read(std::string_view sha) {
-    return std::make_shared<std::ifstream>(shaToPath(sha),
-                                           std::ios_base::in | std::ios_base::binary);
+std::shared_ptr<StoreReader> Store::read(std::string_view sha) {
+    std::shared_lock<std::shared_mutex> lock{smtx};
+
+    if (auto it = infos.find(sha); it != infos.end() && it->second.first == InfoState::Valid) {
+        return std::make_shared<StoreReader>(*this, it->second, Token{});
+    } else {
+        return nullptr;
+    }
 }
 
-std::shared_ptr<std::ofstream> Store::write(std::string_view sha) {
-    return std::make_shared<std::ofstream>(shaToPath(sha),
-                                           std::ios_base::out | std::ios_base::binary);
+std::shared_ptr<StoreWriter> Store::write(std::string_view sha) {
+    std::scoped_lock lock{smtx};
+
+    if (auto it = infos.find(sha); it != infos.end()) {
+        if (it->second.first == InfoState::Valid || it->second.first == InfoState::Writing) {
+            return nullptr;
+        } else if (it->second.first == InfoState::Deleted) {
+            it->second.first = InfoState::Writing;
+            return std::make_shared<StoreWriter>(*this, it->second, shaToPath(sha), Token{});
+        }
+    }
+
+    const auto path = shaToPath(sha);
+    if (std::filesystem::is_regular_file(path)) {
+        auto info = extractInfo(path);
+        infos.try_emplace(info.sha, InfoState::Valid, info);
+        return nullptr;
+    }
+
+    auto [it, inserted] = infos.try_emplace(std::string{sha}, InfoState::Valid, Info{});
+
+    return std::make_shared<StoreWriter>(*this, it->second, path, Token{});
 }
 
 std::string Store::statistics() const {
-    const auto range = infos | std::views::values | std::views::transform(&Info::size);
-    const auto diskSize =
-        std::accumulate(std::begin(range), std::end(range), size_t{0}, std::plus<>{});
-    const auto packages = infos | std::views::values | std::views::transform(&Info::package) |
-                          std::ranges::to<std::set>();
+    const auto diskSize = std::ranges::fold_left(allInfos() | std::views::transform(&Info::size),
+                                                 size_t{0}, std::plus<>{});
+    const auto packages =
+        allInfos() | std::views::transform(&Info::package) | std::ranges::to<std::set>();
 
     return std::format("Found {} caches of {} packages. Using {}", infos.size(), packages.size(),
                        ByteSize{diskSize});
@@ -68,8 +99,21 @@ std::filesystem::path Store::shaToPath(std::string_view sha) const {
     return root / sha.substr(0, 2) / std::format("{}.zip", sha);
 }
 
-fp::UnorderedStringMap<Info> scan(const std::filesystem::path& path,
-                                  std::shared_ptr<spdlog::logger> log) {
+void Store::remove(std::string_view sha) {
+    std::scoped_lock lock{smtx};
+    if (auto it = infos.find(sha); it != infos.end()) {
+        if (it->second.first == InfoState::Valid) {
+            it->second.first = InfoState::Deleted;
+            const auto path = shaToPath(sha);
+
+            log->info("Deleting: {}", path);
+            std::filesystem::remove(path);
+        }
+    }
+}
+
+fp::UnorderedStringMap<std::pair<InfoState, Info>> scan(const std::filesystem::path& path,
+                                                        std::shared_ptr<spdlog::logger> log) {
     return std::filesystem::recursive_directory_iterator(path) | std::views::filter(fp::isZipFile) |
            fp::tryTransform(
                [&](const auto& entry) {
@@ -77,13 +121,15 @@ fp::UnorderedStringMap<Info> scan(const std::filesystem::path& path,
                    return extractInfo(entry.path());
                },
                [&](const auto& entry) {
-                   log->error("error scaning {} : {}, removing entry", entry.path(), fp::exceptionToString());
+                   log->error("error scaning {} : {}, removing entry", entry.path(),
+                              fp::exceptionToString());
                    std::filesystem::remove(entry.path());
                }) |
            std::views::transform([&](auto&& info) {
-               return std::pair<const std::string, Info>{info.sha, info};
+               return std::pair<const std::string, std::pair<InfoState, Info>>{
+                   info.sha, {InfoState::Valid, info}};
            }) |
-           std::ranges::to<fp::UnorderedStringMap<Info>>();
+           std::ranges::to<fp::UnorderedStringMap<std::pair<InfoState, Info>>>();
 }
 
 Info extractInfo(const std::filesystem::path& path) {

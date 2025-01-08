@@ -30,6 +30,10 @@ void parseConfig(const std::filesystem::path& configFile, Settings& settings) {
         settings.logFile = std::filesystem::path{config["log_file"].as<std::string>()};
     }
 
+    if (config["db_file"]) {
+        settings.dbFile = std::filesystem::path{config["db_file"].as<std::string>()};
+    }
+
     if (config["ssl"]) {
         const auto ssl = config["ssl"];
         if (ssl["cert"] && ssl["key"]) {
@@ -46,6 +50,26 @@ void parseConfig(const std::filesystem::path& configFile, Settings& settings) {
         for (auto&& item : auth) {
             settings.auth.write[item.first.as<std::string>()] = item.second.as<std::string>();
         }
+    }
+
+    if (config["max_total_size"]) {
+        settings.maxTotalSize = config["max_total_size"].as<ByteSize>();
+    }
+
+    if (config["max_package_size"]) {
+        settings.maxPackageSize = config["max_package_size"].as<ByteSize>();
+    }
+
+    if (config["max_age"]) {
+        settings.maxAge = config["max_age"].as<Duration>();
+    }
+
+    if (config["max_unused"]) {
+        settings.maxUnused = config["max_unused"].as<Duration>();
+    }
+
+    if (config["dry_run"]) {
+        settings.dryrun = config["dry_run"].as<bool>();
     }
 }
 
@@ -71,6 +95,7 @@ Settings parseArgs(int argc, char* argv[]) {
     args.add_argument("--log_file")
         .help("Log file, will write with log level 0 (All)")
         .metavar("FILE");
+    args.add_argument("--db_file").help("Db file").metavar("FILE");
     args.add_argument("--config").help("Config file to read settings from").metavar("FILE");
     args.add_argument("--auth")
         .default_value(std::vector<std::string>{})
@@ -119,12 +144,21 @@ Settings parseArgs(int argc, char* argv[]) {
             settings.logFile = std::filesystem::path{args.get<std::string>("--log_file")};
         }
 
+        if (args.is_used("--db_file")) {
+            settings.dbFile = std::filesystem::path{args.get<std::string>("--db_file")};
+        }
+
         if (settings.port < 0) {
             settings.port = settings.certAndKey ? 443 : 80;
         }
 
         if (settings.cacheDir.empty()) {
             std::println("A cache dir must be provided\n{}", args.help().str());
+            std::exit(1);
+        }
+
+        if (settings.dbFile.empty()) {
+            std::println("A db file must be provided\n{}", args.help().str());
             std::exit(1);
         }
 

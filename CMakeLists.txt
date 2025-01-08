@@ -11,7 +11,9 @@ target_sources(vcpkg-cache-server
         include/vcpkg-cache-server/functional.hpp
         include/vcpkg-cache-server/store.hpp
         include/vcpkg-cache-server/site.hpp
+        include/vcpkg-cache-server/database.hpp
     PRIVATE
+        src/database.cpp
         src/settings.cpp
         src/functional.cpp
         src/store.cpp
@@ -24,7 +26,7 @@ target_sources(vcpkg-cache-server
 )
 
 
-target_include_directories(vcpkg-cache-server PUBLIC "include")
+target_include_directories(vcpkg-cache-server PUBLIC "resources")
 target_compile_options(vcpkg-cache-server PUBLIC
     $<$<CXX_COMPILER_ID:MSVC>:/W4 /permissive->
     $<$<CXX_COMPILER_ID:AppleClang,Clang,GNU>:-Wall -Wextra>
@@ -47,7 +49,9 @@ find_package(httplib CONFIG REQUIRED)
 find_package(libzippp CONFIG REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
 find_package(yaml-cpp CONFIG REQUIRED)
-target_link_libraries(vcpkg-cache-server PUBLIC httplib::httplib libzippp::libzippp spdlog::spdlog yaml-cpp::yaml-cpp)
+find_package(SqliteOrm CONFIG REQUIRED)
+
+target_link_libraries(vcpkg-cache-server PUBLIC httplib::httplib libzippp::libzippp spdlog::spdlog yaml-cpp::yaml-cpp sqlite_orm::sqlite_orm)
 set_target_properties(vcpkg-cache-server PROPERTIES MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
 install(TARGETS vcpkg-cache-server

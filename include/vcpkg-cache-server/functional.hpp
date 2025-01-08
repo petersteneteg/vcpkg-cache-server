@@ -9,10 +9,30 @@
 #include <algorithm>
 #include <format>
 #include <exception>
+#include <charconv>
+#include <chrono>
+
+#include <yaml-cpp/yaml.h>
 
 namespace vcache {
 
 namespace fp {
+
+namespace detail {
+
+template <class Default, class AlwaysVoid, template <class...> class Op, class... Args>
+struct detector {
+    using value_t = std::false_type;
+    using type = Default;
+};
+
+template <class Default, template <class...> class Op, class... Args>
+struct detector<Default, std::void_t<Op<Args...>>, Op, Args...> {
+    using value_t = std::true_type;
+    using type = Op<Args...>;
+};
+
+}  // namespace detail
 
 constexpr std::pair<std::string_view, std::string_view> splitByFirst(std::string_view str,
                                                                      char delimiter = ' ') {
@@ -24,6 +44,9 @@ constexpr std::string_view trim(std::string_view str) noexcept {
     if (idx1 == std::string_view::npos) return "";
     const auto idx2 = str.find_last_not_of(" \f\n\r\t\v");
     return str.substr(idx1, idx2 + 1 - idx1);
+}
+constexpr std::string_view remove_suffix(std::string_view str, size_t n) noexcept {
+    return str.substr(0, str.size() - n);
 }
 
 template <typename Map, typename Key>
@@ -106,23 +129,211 @@ inline std::string exceptionToString(std::exception_ptr ep) {
     }
 }
 
+template <typename T>
+constexpr bool alwaysFalse() {
+    return false;
+}
+
+struct nonesuch {
+    ~nonesuch() = delete;
+    nonesuch(const nonesuch&) = delete;
+    void operator=(const nonesuch&) = delete;
+};
+
+template <template <class...> class Op, class... Args>
+using is_detected = typename detail::detector<nonesuch, void, Op, Args...>::value_t;
+
+template <template <class...> class Op, class... Args>
+using detected_t = typename detail::detector<nonesuch, void, Op, Args...>::type;
+
+template <class Default, template <class...> class Op, class... Args>
+using detected_or = detail::detector<Default, void, Op, Args...>;
+
+template <template <class...> class Op, class... Args>
+constexpr bool is_detected_v = is_detected<Op, Args...>::value;
+
+template <class Default, template <class...> class Op, class... Args>
+using detected_or_t = typename detected_or<Default, Op, Args...>::type;
+
+template <class Expected, template <class...> class Op, class... Args>
+using is_detected_exact = std::is_same<Expected, detected_t<Op, Args...>>;
+
+template <class Expected, template <class...> class Op, class... Args>
+constexpr bool is_detected_exact_v = is_detected_exact<Expected, Op, Args...>::value;
+
+template <class To, template <class...> class Op, class... Args>
+using is_detected_convertible = std::is_convertible<detected_t<Op, Args...>, To>;
+
+template <class To, template <class...> class Op, class... Args>
+constexpr bool is_detected_convertible_v = is_detected_convertible<To, Op, Args...>::value;
+
 }  // namespace fp
 
 enum struct ByteSize : size_t {};
 
+template <typename T>
+struct FlagFormatter : std::formatter<std::string_view> {
+    template <typename U>
+    using HasEnumToStr = decltype(enumToStr(std::declval<U>()));
+
+    template <typename FormatContext>
+    auto format(T val, FormatContext& ctx) const {
+        if constexpr (fp::is_detected_exact_v<std::string_view, HasEnumToStr, T>) {
+            return std::formatter<std::string_view>::format(enumToStr(val), ctx);
+        } else {
+            static_assert(fp::alwaysFalse<T>(),
+                          "Missing enumToStr(T val) overload for type T "
+                          "FlagFormatter requires that a std::string_view enumToStr(T val) "
+                          "overload exists in the namespace of T");
+        }
+    }
+};
+
+template <typename T>
+struct enumTo {};
+
 }  // namespace vcache
+
+namespace YAML {
+template <>
+struct convert<vcache::ByteSize> {
+    static Node encode(const vcache::ByteSize& size) { return Node{std::to_underlying(size)}; }
+
+    static bool decode(const Node& node, vcache::ByteSize& byteSize) {
+        if (!node.IsScalar()) {
+            return false;
+        }
+
+        const auto& val = node.Scalar();
+
+        const auto tval = vcache::fp::trim(val);
+        using vcache::fp::remove_suffix;
+        auto [str, factor] = [&]() -> std::pair<std::string_view, size_t> {
+            if (tval.ends_with("TB")) {
+                return {remove_suffix(tval, 2), 1'000'000'000'000};
+            } else if (tval.ends_with("GB")) {
+                return {remove_suffix(tval, 2), 1'000'000'000};
+            } else if (tval.ends_with("MB")) {
+                return {remove_suffix(tval, 2), 1'000'000};
+            } else if (tval.ends_with("kB")) {
+                return {remove_suffix(tval, 2), 1'000};
+            } else {
+                return {tval, 1};
+            }
+        }();
+
+        const auto tstr = vcache::fp::trim(str);
+        size_t size{0};
+        if (std::from_chars(tstr.begin(), tstr.end(), size).ec != std::errc{}) {
+            return false;
+        }
+        byteSize = vcache::ByteSize{size * factor};
+
+        return true;
+    }
+};
+
+template <class Rep, class Period>
+struct convert<std::chrono::duration<Rep, Period>> {
+    static Node encode(std::chrono::duration<Rep, Period> d) {
+
+        using namespace std::chrono_literals;
+        using std::chrono::duration_cast;
+        namespace c = std::chrono;
+
+        const auto years = duration_cast<c::years>(d);
+        d -= years;
+        const auto days = duration_cast<c::days>(d);
+        d -= days;
+        const auto hours = duration_cast<c::hours>(d);
+        d -= hours;
+        const auto minutes = duration_cast<c::minutes>(d);
+        d -= minutes;
+        const auto seconds = duration_cast<c::seconds>(d);
+
+        std::string res;
+        if (years != c::years{}) {
+            std::format_to(std::back_inserter(res), "{:%Q}y ", years);
+        }
+        if (days != c::days{}) {
+            std::format_to(std::back_inserter(res), "{:%Q}d ", days);
+        }
+        if (hours != c::hours{}) {
+            std::format_to(std::back_inserter(res), "{:%Q}h ", hours);
+        }
+        if (minutes != c::minutes{}) {
+            std::format_to(std::back_inserter(res), "{:%Q}m ", minutes);
+        }
+        if (seconds != c::seconds{}) {
+            std::format_to(std::back_inserter(res), "{:%Q}s ", seconds);
+        }
+
+        return Node{res};
+    }
+
+    static bool decode(const Node& node, std::chrono::duration<Rep, Period>& duration) {
+        namespace c = std::chrono;
+
+        if (!node.IsScalar()) {
+            return false;
+        }
+
+        const auto& val = node.Scalar();
+
+        std::string_view rest = val;
+        std::string_view current;
+
+        c::seconds res{};
+        while (!rest.empty()) {
+            std::tie(current, rest) = vcache::fp::splitByFirst(val);
+            const auto tval = vcache::fp::trim(current);
+            using vcache::fp::remove_suffix;
+            auto [str, factor] = [&]() -> std::pair<std::string_view, std::chrono::seconds> {
+                if (tval.ends_with("y")) {
+                    return {remove_suffix(tval, 1), c::years{1}};
+                } else if (tval.ends_with("d")) {
+                    return {remove_suffix(tval, 1), c::days{1}};
+                } else if (tval.ends_with("h")) {
+                    return {remove_suffix(tval, 1), c::hours{1}};
+                } else if (tval.ends_with("m")) {
+                    return {remove_suffix(tval, 1), c::minutes{1}};
+                } else if (tval.ends_with("s")) {
+                    return {remove_suffix(tval, 1), c::seconds{1}};
+                } else {
+                    return {tval, c::seconds{1}};
+                }
+            }();
+            const auto tstr = vcache::fp::trim(str);
+            size_t count{0};
+            if (std::from_chars(tstr.begin(), tstr.end(), count).ec != std::errc{}) {
+                return false;
+            }
+            res += count * factor;
+        }
+
+        duration = res;
+        return true;
+    }
+};
+
+}  // namespace YAML
 
 template <>
 struct std::formatter<vcache::ByteSize, char> {
-    std::formatter<std::string_view> formatter;
+    std::formatter<std::string_view> strFormatter;
+    char prefix = 'A';
 
     template <class ParseContext>
     constexpr ParseContext::iterator parse(ParseContext& ctx) {
         auto it = ctx.begin();
+        if (*it == 'T' || *it == 'G' || *it == 'M' || *it == 'k' || *it == 'O') {
+            prefix = *it;
+            ++it;
+        }
         if (*it == '}') {
             return it;
         }
-        return formatter.parse(ctx);
+        return strFormatter.parse(ctx);
     }
 
     template <class FmtContext>
@@ -130,28 +341,28 @@ struct std::formatter<vcache::ByteSize, char> {
         std::array<char, 20> buff;
 
         auto end = buff.data();
-        if (std::to_underlying(size) >= 1'000'000'000'000) {
-            end = std::format_to_n(buff.data(), buff.size(), "{:5.1f} TB",
+        if (prefix == 'T' || (prefix == 'A' && std::to_underlying(size) >= 1'000'000'000'000)) {
+            end = std::format_to_n(buff.data(), buff.size(), "{:.2f} TB",
                                    static_cast<double>(size) / 1'000'000'000'000.0)
                       .out;
-        } else if (std::to_underlying(size) >= 1'000'000'000) {
-            end = std::format_to_n(buff.data(), buff.size(), "{:5.1f} GB",
+        } else if (prefix == 'G' || (prefix == 'A' && std::to_underlying(size) >= 1'000'000'000)) {
+            end = std::format_to_n(buff.data(), buff.size(), "{:.2f} GB",
                                    static_cast<double>(size) / 1'000'000'000.0)
                       .out;
-        } else if (std::to_underlying(size) >= 1'000'000) {
-            end = std::format_to_n(buff.data(), buff.size(), "{:5.1f} MB",
+        } else if (prefix == 'M' || (prefix == 'A' && std::to_underlying(size) >= 1'000'000)) {
+            end = std::format_to_n(buff.data(), buff.size(), "{:.2f} MB",
                                    static_cast<double>(size) / 1'000'000.0)
                       .out;
-        } else if (std::to_underlying(size) >= 1'000) {
-            end = std::format_to_n(buff.data(), buff.size(), "{:5.1f} kB",
+        } else if (prefix == 'k' || (prefix == 'A' && std::to_underlying(size) >= 1'000)) {
+            end = std::format_to_n(buff.data(), buff.size(), "{:.2f} kB",
                                    static_cast<double>(size) / 1'000.0)
                       .out;
         } else {
             end =
-                std::format_to_n(buff.data(), buff.size(), "{:4d} B", std::to_underlying(size)).out;
+                std::format_to_n(buff.data(), buff.size(), "{:d} B", std::to_underlying(size)).out;
         }
 
-        return formatter.format(
+        return strFormatter.format(
             std::string_view{buff.data(), static_cast<size_t>(std::distance(buff.data(), end))},
             ctx);
     }
