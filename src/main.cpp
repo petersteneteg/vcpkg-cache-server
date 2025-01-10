@@ -6,6 +6,10 @@
 
 #include <httplib.h>
 
+#include <fmt/format.h>
+#include <fmt/std.h>
+#include <fmt/chrono.h>
+
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/sinks/basic_file_sink.h>
@@ -17,13 +21,13 @@
 #include <string>
 #include <string_view>
 #include <ranges>
-#include <format>
-#include <print>
 #include <optional>
 #include <utility>
 #include <algorithm>
 #include <numeric>
 #include <thread>
+#include <condition_variable>
+#include <chrono>
 
 namespace vcache {
 
@@ -123,7 +127,7 @@ std::pair<std::string, std::string> requestUserToken(const httplib::Request& req
 std::string logCache(const httplib::Request& req, const Info& info, const Authorization& auth) {
     const auto [user, token] = requestUserToken(req, auth);
 
-    return std::format(
+    return fmt::format(
         "{:5} {:15} {:30} v{:<11} {:15} Size: {:10} Created: {:%Y-%m-%d %H:%M} "
         "Sha: {} Auth {} User {}",
         req.method, fp::mGet(req.headers, "REMOTE_ADDR").value_or("?.?.?.?"), info.package,
@@ -135,10 +139,10 @@ size_t removeCache(const db::Cache& cache, db::Database& db, std::vector<std::st
     using namespace sqlite_orm;
 
     log->info(
-        std::format("[Maintain]    Removing cache: {} used: {} "
-                    "created: {} size: {:>10}",
-                    cache.sha, db::formatTimeStamp(cache.lastUsed),
-                    db::formatTimeStamp(cache.created), ByteSize{cache.size}));
+        "[Maintain]    Removing cache: {} used: {:%Y-%m-%d %H:%M} "
+        "created: {:%Y-%m-%d %H:%M} size: {:>10}",
+        cache.sha, Time{Duration{cache.lastUsed}}, Time{Duration{cache.created}},
+        ByteSize{cache.size});
 
     db.update_all(set(c(&db::Cache::deleted) = true), where(c(&db::Cache::id) == cache.id));
 
@@ -147,7 +151,7 @@ size_t removeCache(const db::Cache& cache, db::Database& db, std::vector<std::st
     return cache.size;
 }
 
-void maintain(Store& store, db::Database& db, const Settings& settings,
+void maintain(Store& store, db::Database& db, const Maintenance& maintenance,
               std::shared_ptr<spdlog::logger> log, Time now) {
 
     std::vector<std::string> toDelete;
@@ -156,44 +160,46 @@ void maintain(Store& store, db::Database& db, const Settings& settings,
 
     size_t allRemoved{};
 
+    log->info("[Maintain] Running Maintenance");
+
+    allRemoved += maintenance.maxAge
+                      .and_then([&](Duration maxAge) -> std::optional<size_t> {
+                          using namespace sqlite_orm;
+                          const auto cutoff = now - maxAge;
+
+                          log->info("[Maintain] Looking for packages created before: {} ({})",
+                                    cutoff, maxAge);
+                          size_t removed{};
+                          for (auto& cache : db.iterate<db::Cache>(where(and_(
+                                   c(&db::Cache::deleted) == false,
+                                   c(&db::Cache::created) < cutoff.time_since_epoch().count())))) {
+
+                              removed += removeCache(cache, db, toDelete, log);
+                          }
+                          return removed;
+                      })
+                      .value_or(size_t{0});
+
+    allRemoved += maintenance.maxUnused
+                      .and_then([&](Duration maxUnused) -> std::optional<size_t> {
+                          using namespace sqlite_orm;
+                          const auto cutoff = now - maxUnused;
+
+                          log->info("[Maintain] Looking for packages not used after: {} ({})",
+                                    cutoff, maxUnused);
+                          size_t removed{};
+                          for (auto& cache : db.iterate<db::Cache>(where(and_(
+                                   c(&db::Cache::deleted) == false,
+                                   c(&db::Cache::lastUsed) < cutoff.time_since_epoch().count())))) {
+
+                              removed += removeCache(cache, db, toDelete, log);
+                          }
+                          return removed;
+                      })
+                      .value_or(size_t{0});
+
     allRemoved +=
-        settings.maxAge
-            .and_then([&](Duration maxAge) -> std::optional<size_t> {
-                using namespace sqlite_orm;
-                const auto cutoff = now - maxAge;
-
-                log->info(std::format("[Maintain] Remove packages created before: {}", cutoff));
-                size_t removed{};
-                for (auto& cache : db.iterate<db::Cache>(
-                         where(and_(c(&db::Cache::deleted) == false,
-                                    c(&db::Cache::created) < cutoff.time_since_epoch().count())))) {
-
-                    removed += removeCache(cache, db, toDelete, log);
-                }
-                return removed;
-            })
-            .value_or(size_t{0});
-
-    allRemoved +=
-        settings.maxUnused
-            .and_then([&](Duration maxUnused) -> std::optional<size_t> {
-                using namespace sqlite_orm;
-                const auto cutoff = now - maxUnused;
-
-                log->info(std::format("[Maintain] Remove packages not used after: {}", cutoff));
-                size_t removed{};
-                for (auto& cache : db.iterate<db::Cache>(where(
-                         and_(c(&db::Cache::deleted) == false,
-                              c(&db::Cache::lastUsed) < cutoff.time_since_epoch().count())))) {
-
-                    removed += removeCache(cache, db, toDelete, log);
-                }
-                return removed;
-            })
-            .value_or(size_t{0});
-
-    allRemoved +=
-        settings.maxPackageSize
+        maintenance.maxPackageSize
             .and_then([&](ByteSize max) -> std::optional<size_t> {
                 using namespace sqlite_orm;
                 const auto sizes = db.select(
@@ -206,9 +212,8 @@ void maintain(Store& store, db::Database& db, const Settings& settings,
 
                 size_t totalRemoved{};
                 for (const auto& [size, name, pid] : sizes) {
-                    log->info(std::format(
-                        "[Maintain] Package: {:20} size {:>10} exceeds given max size {:>10}", name,
-                        ByteSize{static_cast<size_t>(size)}, max));
+                    log->info("[Maintain] Package: {:20} size {:>10} exceeds given max size {:>10}",
+                              name, ByteSize{static_cast<size_t>(size)}, max);
 
                     const auto overflow = size - std::to_underlying(max);
                     size_t removed{};
@@ -226,7 +231,7 @@ void maintain(Store& store, db::Database& db, const Settings& settings,
             })
             .value_or(size_t{0});
 
-    allRemoved += settings.maxTotalSize
+    allRemoved += maintenance.maxTotalSize
                       .and_then([&](ByteSize max) -> std::optional<size_t> {
                           using namespace sqlite_orm;
                           const auto totalSize =
@@ -234,10 +239,9 @@ void maintain(Store& store, db::Database& db, const Settings& settings,
 
                           if (totalSize > std::to_underlying(max)) {
                               const auto overflow = totalSize - std::to_underlying(max);
-                              log->info(std::format(
-                                  "[Maintain] Total Cache size {} exceeds given max {} by {}",
-                                  ByteSize{static_cast<size_t>(totalSize)}, ByteSize{max},
-                                  ByteSize(overflow)));
+                              log->info("[Maintain] Total Cache size {} exceeds given max {} by {}",
+                                        ByteSize{static_cast<size_t>(totalSize)}, ByteSize{max},
+                                        ByteSize(overflow));
                               return overflow;
                           } else {
                               return std::nullopt;
@@ -258,9 +262,11 @@ void maintain(Store& store, db::Database& db, const Settings& settings,
                       })
                       .value_or(size_t{0});
 
-    log->info(std::format("[Maintain] Remove a total of {}", ByteSize{allRemoved}));
+    if (allRemoved > 0) {
+        log->info("[Maintain] Remove a total of {}", ByteSize{allRemoved});
+    }
 
-    if (settings.dryrun) {
+    if (maintenance.dryrun) {
         db.rollback();
         log->info("[Maintain] changes discarded, dry run mode");
     } else {
@@ -269,6 +275,7 @@ void maintain(Store& store, db::Database& db, const Settings& settings,
             store.remove(sha);
         }
     }
+    log->info("[Maintain] Maintenance finished");
 }
 
 }  // namespace vcache
@@ -298,8 +305,12 @@ int main(int argc, char* argv[]) {
 
     std::jthread maintenance{[log, &settings, &db, &store](std::stop_token token) {
         while (!token.stop_requested()) {
-            maintain(store, db, settings, log, Clock::now());
-            std::this_thread::sleep_for(std::chrono::hours{1});
+            maintain(store, db, settings.maintenance, log, Clock::now());
+
+            std::mutex mutex;
+            std::unique_lock lock(mutex);
+            std::condition_variable_any().wait_for(lock, token, std::chrono::hours{1},
+                                                   [] { return false; });
         }
     }};
 
@@ -409,7 +420,8 @@ int main(int argc, char* argv[]) {
     });
     server->Get(R"(/find/:package)", [&](const httplib::Request& req, httplib::Response& res) {
         const auto package = req.path_params.at("package");
-        res.set_content(site::find(package, store, mode(req)), "text/html");
+        res.set_content(site::find(package, store, db, mode(req), sort(req), order(req)),
+                        "text/html");
     });
     server->Get(R"(/package/:sha)", [&](const httplib::Request& req, httplib::Response& res) {
         const auto sha = req.path_params.at("sha");
@@ -442,12 +454,12 @@ int main(int argc, char* argv[]) {
 
     server->set_error_handler([](const httplib::Request&, httplib::Response& res) {
         res.set_content(
-            std::format("<p>Error Status: <span style='color:red;'>{}</span></p>", res.status),
+            fmt::format("<p>Error Status: <span style='color:red;'>{}</span></p>", res.status),
             "text/html");
     });
     server->set_exception_handler(
         [](const httplib::Request&, httplib::Response& res, std::exception_ptr ep) {
-            res.set_content(std::format("<h1>Error 500</h1><p>{}</p>", fp::exceptionToString(ep)),
+            res.set_content(fmt::format("<h1>Error 500</h1><p>{}</p>", fp::exceptionToString(ep)),
                             "text/html");
             res.status = httplib::StatusCode::InternalServerError_500;
         });

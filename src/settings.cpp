@@ -1,9 +1,10 @@
 #include <vcpkg-cache-server/settings.hpp>
 
 #include <argparse/argparse.hpp>
-#include <print>
 
 #include <yaml-cpp/yaml.h>
+
+#include <fmt/std.h>
 
 namespace vcache {
 
@@ -52,24 +53,27 @@ void parseConfig(const std::filesystem::path& configFile, Settings& settings) {
         }
     }
 
-    if (config["max_total_size"]) {
-        settings.maxTotalSize = config["max_total_size"].as<ByteSize>();
-    }
+    if (config["maintenance"]) {
+        const auto maintenance = config["maintenance"];
+        if (maintenance["max_total_size"]) {
+            settings.maintenance.maxTotalSize = maintenance["max_total_size"].as<ByteSize>();
+        }
 
-    if (config["max_package_size"]) {
-        settings.maxPackageSize = config["max_package_size"].as<ByteSize>();
-    }
+        if (maintenance["max_package_size"]) {
+            settings.maintenance.maxPackageSize = maintenance["max_package_size"].as<ByteSize>();
+        }
 
-    if (config["max_age"]) {
-        settings.maxAge = config["max_age"].as<Duration>();
-    }
+        if (maintenance["max_age"]) {
+            settings.maintenance.maxAge = maintenance["max_age"].as<Duration>();
+        }
 
-    if (config["max_unused"]) {
-        settings.maxUnused = config["max_unused"].as<Duration>();
-    }
+        if (maintenance["max_unused"]) {
+            settings.maintenance.maxUnused = maintenance["max_unused"].as<Duration>();
+        }
 
-    if (config["dry_run"]) {
-        settings.dryrun = config["dry_run"].as<bool>();
+        if (maintenance["dry_run"]) {
+            settings.maintenance.dryrun = maintenance["dry_run"].as<bool>();
+        }
     }
 }
 
@@ -108,7 +112,12 @@ Settings parseArgs(int argc, char* argv[]) {
         args.parse_args(argc, argv);
         if (args.is_used("--config")) {
             const auto configFile = std::filesystem::path{args.get<std::string>("--config")};
-            parseConfig(configFile, settings);
+            try {
+                parseConfig(configFile, settings);
+            } catch (const YAML::Exception& e) {
+                fmt::println("Error parsing config file {} {}", configFile, e.what());
+                std::exit(1);
+            }
         }
 
         if (args.is_used("--cache_dir")) {
@@ -121,7 +130,7 @@ Settings parseArgs(int argc, char* argv[]) {
         }
 
         for (size_t i = 1; auto& token : args.get<std::vector<std::string>>("--auth")) {
-            settings.auth.write[token] = std::format("User {}", i++);
+            settings.auth.write[token] = fmt::format("User {}", i++);
         }
 
         if ((args.is_used("--cert") && !args.is_used("--key")) ||
@@ -153,17 +162,17 @@ Settings parseArgs(int argc, char* argv[]) {
         }
 
         if (settings.cacheDir.empty()) {
-            std::println("A cache dir must be provided\n{}", args.help().str());
+            fmt::println("A cache dir must be provided\n{}", args.help().str());
             std::exit(1);
         }
 
         if (settings.dbFile.empty()) {
-            std::println("A db file must be provided\n{}", args.help().str());
+            fmt::println("A db file must be provided\n{}", args.help().str());
             std::exit(1);
         }
 
     } catch (const std::exception& err) {
-        std::println("{}\n{}", err.what(), args.help().str());
+        fmt::println("{}\n{}", err.what(), args.help().str());
         std::exit(1);
     }
 

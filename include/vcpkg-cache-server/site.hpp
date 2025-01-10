@@ -15,7 +15,20 @@ class Store;
 namespace site {
 
 enum class Mode { Full, Plain };
-enum class Sort { Default, Name, Count, Size, First, Last, Downloads, Use };
+enum class Sort {
+    Default,
+    Name,
+    Count,
+    Size,
+    First,
+    Last,
+    Downloads,
+    Use,
+    Version,
+    Arch,
+    SHA,
+    NumSortMethods
+};
 enum class Order { Descending, Ascending };
 
 constexpr std::string_view enumToStr(Mode mode) {
@@ -31,22 +44,30 @@ constexpr std::string_view enumToStr(Mode mode) {
 
 constexpr std::string_view enumToStr(Sort sort) {
     switch (sort) {
-        case Sort::Default:
+        using enum Sort;
+        case Default:
             return "default";
-        case Sort::Name:
+        case Name:
             return "name";
-        case Sort::Count:
+        case Count:
             return "count";
-        case Sort::Size:
+        case Size:
             return "size";
-        case Sort::First:
+        case First:
             return "first";
-        case Sort::Last:
+        case Last:
             return "last";
-        case Sort::Downloads:
+        case Downloads:
             return "download";
-        case Sort::Use:
+        case Use:
             return "use";
+        case Version:
+            return "version";
+        case Arch:
+            return "arch";
+        case SHA:
+            return "sha";
+
         default:
             throw std::runtime_error("Invalid Sort enum");
     }
@@ -65,7 +86,8 @@ std::string match();
 std::string compare(std::string_view sha, const Store& store, Mode mode);
 std::string match(std::string_view abi, std::string_view package, const Store& store);
 std::string list(const Store& store);
-std::string find(std::string_view package, const Store& store, Mode mode);
+std::string find(std::string_view package, const Store& store, db::Database& db, Mode mode,
+                 Sort sort, Order order);
 std::string sha(std::string_view package, const Store& store, Mode mode);
 std::string favicon();
 std::string maskicon();
@@ -117,6 +139,12 @@ struct enumTo<site::Sort> {
             return Downloads;
         } else if (str == enumToStr(Use)) {
             return Use;
+        } else if (str == enumToStr(Version)) {
+            return Version;
+        } else if (str == enumToStr(Arch)) {
+            return Arch;
+        } else if (str == enumToStr(SHA)) {
+            return SHA;
         } else {
             return std::nullopt;
         }
@@ -139,8 +167,8 @@ struct enumTo<site::Order> {
 }  // namespace vcache
 
 template <>
-struct std::formatter<vcache::site::Mode> : vcache::FlagFormatter<vcache::site::Mode> {};
+struct fmt::formatter<vcache::site::Mode> : vcache::FlagFormatter<vcache::site::Mode> {};
 template <>
-struct std::formatter<vcache::site::Sort> : vcache::FlagFormatter<vcache::site::Sort> {};
+struct fmt::formatter<vcache::site::Sort> : vcache::FlagFormatter<vcache::site::Sort> {};
 template <>
-struct std::formatter<vcache::site::Order> : vcache::FlagFormatter<vcache::site::Order> {};
+struct fmt::formatter<vcache::site::Order> : vcache::FlagFormatter<vcache::site::Order> {};

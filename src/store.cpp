@@ -2,11 +2,11 @@
 
 #include <libzippp.h>
 
+#include <fmt/format.h>
 #include <fmt/std.h>
 
 #include <numeric>
 #include <ranges>
-#include <format>
 #include <set>
 
 namespace vcache {
@@ -91,12 +91,12 @@ std::string Store::statistics() const {
     const auto packages =
         allInfos() | std::views::transform(&Info::package) | std::ranges::to<std::set>();
 
-    return std::format("Found {} caches of {} packages. Using {}", infos.size(), packages.size(),
+    return fmt::format("Found {} caches of {} packages. Using {}", infos.size(), packages.size(),
                        ByteSize{diskSize});
 }
 
 std::filesystem::path Store::shaToPath(std::string_view sha) const {
-    return root / sha.substr(0, 2) / std::format("{}.zip", sha);
+    return root / sha.substr(0, 2) / fmt::format("{}.zip", sha);
 }
 
 void Store::remove(std::string_view sha) {
@@ -143,7 +143,7 @@ Info extractInfo(const std::filesystem::path& path) {
     auto ctrlMap = ctrl.readAsText() | fp::splitIntoPairs('\n', ':') | std::ranges::to<std::map>();
 
     auto abi = zf.getEntry(
-        std::format("share/{}/vcpkg_abi_info.txt", fp::mGet(ctrlMap, "Package").value_or("?")));
+        fmt::format("share/{}/vcpkg_abi_info.txt", fp::mGet(ctrlMap, "Package").value_or("?")));
     if (abi.isNull()) {
         auto entries = zf.getEntries();
         if (auto it = std::ranges::find_if(entries, fp::endsWith("vcpkg_abi_info.txt"),

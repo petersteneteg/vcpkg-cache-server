@@ -7,14 +7,22 @@
 #include <optional>
 #include <functional>
 #include <algorithm>
-#include <format>
 #include <exception>
 #include <charconv>
 #include <chrono>
+#include <filesystem>
+
+#include <fmt/format.h>
+#include <fmt/chrono.h>
 
 #include <yaml-cpp/yaml.h>
 
 namespace vcache {
+
+using Time = std::filesystem::file_time_type;
+using Duration = Time::duration;
+using Clock = Time::clock;
+using Rep = Time::rep;
 
 namespace fp {
 
@@ -172,14 +180,14 @@ constexpr bool is_detected_convertible_v = is_detected_convertible<To, Op, Args.
 enum struct ByteSize : size_t {};
 
 template <typename T>
-struct FlagFormatter : std::formatter<std::string_view> {
+struct FlagFormatter : fmt::formatter<std::string_view> {
     template <typename U>
     using HasEnumToStr = decltype(enumToStr(std::declval<U>()));
 
     template <typename FormatContext>
     auto format(T val, FormatContext& ctx) const {
         if constexpr (fp::is_detected_exact_v<std::string_view, HasEnumToStr, T>) {
-            return std::formatter<std::string_view>::format(enumToStr(val), ctx);
+            return fmt::formatter<std::string_view>::format(enumToStr(val), ctx);
         } else {
             static_assert(fp::alwaysFalse<T>(),
                           "Missing enumToStr(T val) overload for type T "
@@ -253,19 +261,19 @@ struct convert<std::chrono::duration<Rep, Period>> {
 
         std::string res;
         if (years != c::years{}) {
-            std::format_to(std::back_inserter(res), "{:%Q}y ", years);
+            fmt::format_to(std::back_inserter(res), "{:%Q}y ", years);
         }
         if (days != c::days{}) {
-            std::format_to(std::back_inserter(res), "{:%Q}d ", days);
+            fmt::format_to(std::back_inserter(res), "{:%Q}d ", days);
         }
         if (hours != c::hours{}) {
-            std::format_to(std::back_inserter(res), "{:%Q}h ", hours);
+            fmt::format_to(std::back_inserter(res), "{:%Q}h ", hours);
         }
         if (minutes != c::minutes{}) {
-            std::format_to(std::back_inserter(res), "{:%Q}m ", minutes);
+            fmt::format_to(std::back_inserter(res), "{:%Q}m ", minutes);
         }
         if (seconds != c::seconds{}) {
-            std::format_to(std::back_inserter(res), "{:%Q}s ", seconds);
+            fmt::format_to(std::back_inserter(res), "{:%Q}s ", seconds);
         }
 
         return Node{res};
@@ -319,13 +327,15 @@ struct convert<std::chrono::duration<Rep, Period>> {
 }  // namespace YAML
 
 template <>
-struct std::formatter<vcache::ByteSize, char> {
-    std::formatter<std::string_view> strFormatter;
+struct fmt::formatter<vcache::ByteSize, char> {
+    fmt::formatter<std::string_view> strFormatter;
     char prefix = 'A';
 
     template <class ParseContext>
     constexpr ParseContext::iterator parse(ParseContext& ctx) {
         auto it = ctx.begin();
+        if (it == ctx.end()) return it;
+
         if (*it == 'T' || *it == 'G' || *it == 'M' || *it == 'k' || *it == 'O') {
             prefix = *it;
             ++it;
@@ -333,6 +343,7 @@ struct std::formatter<vcache::ByteSize, char> {
         if (*it == '}') {
             return it;
         }
+
         return strFormatter.parse(ctx);
     }
 
@@ -342,28 +353,48 @@ struct std::formatter<vcache::ByteSize, char> {
 
         auto end = buff.data();
         if (prefix == 'T' || (prefix == 'A' && std::to_underlying(size) >= 1'000'000'000'000)) {
-            end = std::format_to_n(buff.data(), buff.size(), "{:.2f} TB",
+            end = fmt::format_to_n(buff.data(), buff.size(), "{:.2f} TB",
                                    static_cast<double>(size) / 1'000'000'000'000.0)
                       .out;
         } else if (prefix == 'G' || (prefix == 'A' && std::to_underlying(size) >= 1'000'000'000)) {
-            end = std::format_to_n(buff.data(), buff.size(), "{:.2f} GB",
+            end = fmt::format_to_n(buff.data(), buff.size(), "{:.2f} GB",
                                    static_cast<double>(size) / 1'000'000'000.0)
                       .out;
         } else if (prefix == 'M' || (prefix == 'A' && std::to_underlying(size) >= 1'000'000)) {
-            end = std::format_to_n(buff.data(), buff.size(), "{:.2f} MB",
+            end = fmt::format_to_n(buff.data(), buff.size(), "{:.2f} MB",
                                    static_cast<double>(size) / 1'000'000.0)
                       .out;
         } else if (prefix == 'k' || (prefix == 'A' && std::to_underlying(size) >= 1'000)) {
-            end = std::format_to_n(buff.data(), buff.size(), "{:.2f} kB",
+            end = fmt::format_to_n(buff.data(), buff.size(), "{:.2f} kB",
                                    static_cast<double>(size) / 1'000.0)
                       .out;
         } else {
             end =
-                std::format_to_n(buff.data(), buff.size(), "{:d} B", std::to_underlying(size)).out;
+                fmt::format_to_n(buff.data(), buff.size(), "{:d} B", std::to_underlying(size)).out;
         }
 
         return strFormatter.format(
             std::string_view{buff.data(), static_cast<size_t>(std::distance(buff.data(), end))},
             ctx);
+    }
+};
+
+template <>
+struct fmt::formatter<vcache::Time, char> {
+    fmt::formatter<std::chrono::sys_time<vcache::Duration>> formatter;
+
+    template <class ParseContext>
+    constexpr ParseContext::iterator parse(ParseContext& ctx) {
+        return formatter.parse(ctx);
+    }
+
+    template <class FmtContext>
+    constexpr FmtContext::iterator format(vcache::Time time, FmtContext& ctx) const {
+        if (time.time_since_epoch().count() == -1) {
+            auto it = ctx.out();
+            *it++ = '-';
+            return it;
+        }
+        return formatter.format(vcache::Clock::to_sys(time), ctx);
     }
 };

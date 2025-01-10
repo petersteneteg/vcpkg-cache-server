@@ -6,7 +6,10 @@
 #include <vcpkg-cache-server/resources/htmx.js.hpp>
 #include <vcpkg-cache-server/resources/bootstrap.css.hpp>
 
-#include <format>
+#include <fmt/format.h>
+#include <fmt/std.h>
+#include <fmt/chrono.h>
+
 #include <ranges>
 #include <algorithm>
 #include <set>
@@ -160,36 +163,36 @@ std::string formatDiff(const auto& dstMap, const auto& srcMap) {
     keys.insert_range(srcMap | std::views::keys);
 
     std::string buff;
-    std::format_to(std::back_inserter(buff), "<dl>");
+    fmt::format_to(std::back_inserter(buff), "<dl>");
     for (const auto& key : keys) {
         auto dst = fp::mGet(dstMap, key);
         auto src = fp::mGet(srcMap, key);
         if (dst && src) {
             if (*dst != *src) {
-                std::format_to(std::back_inserter(buff),
+                fmt::format_to(std::back_inserter(buff),
                                "<dt>{}</dt><dd><ul><li><code>{}</code></"
                                "li><li><code>{}</code></li></ul></dd>\n",
                                key, *dst, *src);
             }
         } else if (dst) {
-            std::format_to(std::back_inserter(buff),
+            fmt::format_to(std::back_inserter(buff),
                            "<dt>{}</dt><dd>Missing in source <code>{}</code></dd>\n", key, *dst);
         } else if (src) {
-            std::format_to(std::back_inserter(buff),
+            fmt::format_to(std::back_inserter(buff),
                            "<dt>{}</dt><dd>Missing in target <code>{}</code></dd>\n", key, *src);
         }
     }
-    std::format_to(std::back_inserter(buff), "</dl>");
+    fmt::format_to(std::back_inserter(buff), "</dl>");
     return buff;
 }
 
 void formatMapTo(const auto& range, std::string& buff) {
-    std::format_to(std::back_inserter(buff), "<dl>\n");
+    fmt::format_to(std::back_inserter(buff), "<dl>\n");
     for (const auto& [key, val] : range) {
-        std::format_to(std::back_inserter(buff), "<dt>{}</dt>\n", key);
-        std::format_to(std::back_inserter(buff), "<dd>{}</dd>\n", val);
+        fmt::format_to(std::back_inserter(buff), "<dt>{}</dt>\n", key);
+        fmt::format_to(std::back_inserter(buff), "<dd>{}</dd>\n", val);
     }
-    std::format_to(std::back_inserter(buff), "</dl>\n");
+    fmt::format_to(std::back_inserter(buff), "</dl>\n");
 }
 
 std::string formatMap(const auto& range) {
@@ -199,7 +202,7 @@ std::string formatMap(const auto& range) {
 }
 
 void formatInfoTo(const Info& info, std::string& buff) {
-    std::format_to(std::back_inserter(buff),
+    fmt::format_to(std::back_inserter(buff),
                    "<h2>{}</h2><dl>"
                    "<dt>Version:</dt><dd>{}</dd>"
                    "<dt>Arch:</dt><dd>{}</dd>"
@@ -263,7 +266,7 @@ std::string button(std::string_view url, std::string_view content, Sort tag, Sor
         }
     }();
 
-    return std::format(str, url, tag, newOrder, content, indicator);
+    return fmt::format(str, url, tag, newOrder, content, indicator);
 }
 
 std::string navItem(std::string_view name, std::string_view url, bool active) {
@@ -282,7 +285,7 @@ std::string navItem(std::string_view name, std::string_view url, bool active) {
         </li>
     )";
 
-    return std::format(str, active ? "active" : "", url, name);
+    return fmt::format(str, active ? "active" : "", url, name);
 }
 
 }  // namespace
@@ -294,7 +297,7 @@ std::string detail::nav(const std::vector<std::pair<std::string, std::string>>& 
                      }) |
                      std::views::join | std::ranges::to<std::string>();
 
-    return std::format(R"(
+    return fmt::format(R"(
     <nav>
         <ol class="breadcrumb fs-4">
             {}
@@ -308,7 +311,7 @@ std::string detail::deliver(std::string_view content, Mode mode) {
     if (mode == Mode::Plain) {
         return std::string{content};
     } else if (mode == Mode::Full) {
-        return std::format(html::index, html::style, content);
+        return fmt::format(html::index, html::style, content);
     } else {
         return "";
     }
@@ -324,6 +327,27 @@ struct RowItem {
     Time lastTime;
     double similarity;
 };
+
+template <Sort S>
+decltype(auto) getRowItem() {
+    using enum Sort;
+    if constexpr (S == Name)
+        return &RowItem::name;
+    else if constexpr (S == Count)
+        return &RowItem::count;
+    else if constexpr (S == Size)
+        return &RowItem::diskSize;
+    else if constexpr (S == First)
+        return &RowItem::firstTime;
+    else if constexpr (S == Last)
+        return &RowItem::lastTime;
+    else if constexpr (S == Downloads)
+        return &RowItem::downloads;
+    else if constexpr (S == Use)
+        return &RowItem::lastUse;
+    else
+        return nullptr;
+}
 
 std::string index(const Store& store, db::Database& db, Mode mode, Sort sort, Order order,
                   std::string_view search) {
@@ -356,59 +380,22 @@ std::string index(const Store& store, db::Database& db, Mode mode, Sort sort, Or
                 }) |
                 std::ranges::to<std::vector>();
 
-    if (order == Order::Ascending) {
-        switch (sort) {
-            case Sort::Name:
-                std::ranges::sort(list, std::less<>{}, &RowItem::name);
-                break;
-            case Sort::Count:
-                std::ranges::sort(list, std::less<>{}, &RowItem::count);
-                break;
-            case Sort::Size:
-                std::ranges::sort(list, std::less<>{}, &RowItem::diskSize);
-                break;
-            case Sort::First:
-                std::ranges::sort(list, std::less<>{}, &RowItem::firstTime);
-                break;
-            case Sort::Last:
-                std::ranges::sort(list, std::less<>{}, &RowItem::lastTime);
-                break;
-            case Sort::Downloads:
-                std::ranges::sort(list, std::less<>{}, &RowItem::downloads);
-                break;
-            case Sort::Use:
-                std::ranges::sort(list, std::less<>{}, &RowItem::lastUse);
-                break;
-            case Sort::Default:
-                break;
-        }
-    } else {
-        switch (sort) {
-            case Sort::Name:
-                std::ranges::sort(list, std::greater<>{}, &RowItem::name);
-                break;
-            case Sort::Count:
-                std::ranges::sort(list, std::greater<>{}, &RowItem::count);
-                break;
-            case Sort::Size:
-                std::ranges::sort(list, std::greater<>{}, &RowItem::diskSize);
-                break;
-            case Sort::First:
-                std::ranges::sort(list, std::greater<>{}, &RowItem::firstTime);
-                break;
-            case Sort::Last:
-                std::ranges::sort(list, std::greater<>{}, &RowItem::lastTime);
-                break;
-            case Sort::Downloads:
-                std::ranges::sort(list, std::greater<>{}, &RowItem::downloads);
-                break;
-            case Sort::Use:
-                std::ranges::sort(list, std::greater<>{}, &RowItem::lastUse);
-                break;
-            case Sort::Default:
-                break;
-        }
+    constexpr auto table = []<size_t... Is>(std::integer_sequence<size_t, Is...>) {
+        return std::array{+[](decltype(list)& list, Order order) {
+            auto proj = getRowItem<static_cast<Sort>(Is)>();
+            if constexpr (!std::is_same_v<decltype(proj), std::nullptr_t>) {
+                if (order == Order::Ascending) {
+                    std::ranges::sort(list, std::less<>{}, proj);
+                } else {
+                    std::ranges::sort(list, std::greater<>{}, proj);
+                }
+            }
+        }...};
     }
+    (std::make_integer_sequence<size_t, std::to_underlying(Sort::NumSortMethods)>());
+
+    table[std::to_underlying(sort)](list, order);
+
     if (sort == Sort::Default && !search.empty()) {
         std::ranges::sort(list, std::greater<>{}, &RowItem::similarity);
     }
@@ -425,18 +412,18 @@ std::string index(const Store& store, db::Database& db, Mode mode, Sort sort, Or
             <div class="col">{1}</div>
             <div class="col">{2:M}</div>
             <div class="col">{3}</div>
-            <div class="col">{4}</div>
+            <div class="col">{4:%Y-%m-%d %H:%M}</div>
             <div class="col">{5:%Y-%m-%d %H:%M}</div>
             <div class="col">{6:%Y-%m-%d %H:%M}</div>
         </div>
     )";
 
-    const auto str = list | std::views::transform([&](const RowItem& item) {
-                         const auto lastUse = db::formatTimeStamp(item.lastUse);
-                         return std::format(itemStr, item.name, item.count, ByteSize{item.diskSize},
-                                            item.downloads, lastUse, item.firstTime, item.lastTime);
-                     }) |
-                     std::views::join | std::ranges::to<std::string>();
+    const auto str =
+        list | std::views::transform([&](const RowItem& item) {
+            return fmt::format(itemStr, item.name, item.count, ByteSize{item.diskSize},
+                               item.downloads, item.lastUse, item.firstTime, item.lastTime);
+        }) |
+        std::views::join | std::ranges::to<std::string>();
 
     const auto totalSize = std::ranges::fold_left(
         list | std::views::transform([&](const RowItem& item) { return item.diskSize; }), size_t{0},
@@ -445,20 +432,18 @@ std::string index(const Store& store, db::Database& db, Mode mode, Sort sort, Or
         list | std::views::transform([&](const RowItem& item) { return item.count; }), size_t{0},
         std::plus<>{});
 
-    const auto stats = std::format("Found {} caches of {} packages. Using {}", totalCount,
+    const auto stats = fmt::format("Found {} caches of {} packages. Using {}", totalCount,
                                    list.size(), ByteSize{totalSize});
 
     const auto nameButton = button("/", "Package", Sort::Name, sort, order);
     const auto countButton = button("/", "Count", Sort::Count, sort, order);
     const auto sizeButton = button("/", "Size", Sort::Size, sort, order);
-
     const auto downloadsButton = button("/", "Downloads", Sort::Downloads, sort, order);
     const auto useButton = button("/", "Last Use", Sort::Use, sort, order);
-
     const auto firstButton = button("/", "First Cache", Sort::First, sort, order);
     const auto lastButton = button("/", "Last Cache", Sort::Last, sort, order);
 
-    const auto headerRow = std::format(R"(
+    const auto headerRow = fmt::format(R"(
             <div class="row">
                 <div class="col">{}</div>
                 <div class="col">{}</div>
@@ -494,13 +479,13 @@ std::string index(const Store& store, db::Database& db, Mode mode, Sort sort, Or
             {4}
         </div>
     )";
-    const auto content = std::format(html, nav, search, stats, headerRow, str);
+    const auto content = fmt::format(html, nav, search, stats, headerRow, str);
 
     return detail::deliver(content, mode);
 }
 
 std::string match() {
-    return std::format(R"({}{}<div id="result"></div>{}{})", html::pre, html::form, html::script,
+    return fmt::format(R"({}{}<div id="result"></div>{}{})", html::pre, html::form, html::script,
                        html::post);
 }
 
@@ -515,18 +500,18 @@ std::string match(std::string_view abi, std::string_view package, const Store& s
                       [&](const auto& info) { return missmatches(info.abi, abiMap); });
 
     const auto str = matches | std::views::take(3) | std::views::transform([&](const auto& info) {
-                         return std::format("<div><h3>Time: {:%Y-%m-%d %H:%M:%S} {}</h3>{}</div>",
+                         return fmt::format("<div><h3>Time: {:%Y-%m-%d %H:%M:%S} {}</h3>{}</div>",
                                             info.time, info.sha, formatDiff(abiMap, info.abi));
                      }) |
                      std::views::join | std::ranges::to<std::string>();
 
-    return std::format(R"(<h1>Target ABI:</h1><div>{}</div><div>{}</div>)", formatMap(abiMap), str);
+    return fmt::format(R"(<h1>Target ABI:</h1><div>{}</div><div>{}</div>)", formatMap(abiMap), str);
 }
 
 std::string compare(std::string_view sha, const Store& store, Mode mode) {
     const auto* targetInfo = store.info(sha);
     if (!targetInfo) {
-        return detail::deliver(std::format("<h1>Error</h1><div>Sha: {} not found</div>", sha),
+        return detail::deliver(fmt::format("<h1>Error</h1><div>Sha: {} not found</div>", sha),
                                mode);
     }
 
@@ -542,42 +527,136 @@ std::string compare(std::string_view sha, const Store& store, Mode mode) {
                       [&](const auto& info) { return missmatches(info.abi, abiMap); });
 
     const auto str = matches | std::views::take(5) | std::views::transform([&](const auto& info) {
-                         return std::format("<div><h3>Time: {:%Y-%m-%d %H:%M:%S} {}</h3>{}</div>",
+                         return fmt::format("<div><h3>Time: {:%Y-%m-%d %H:%M:%S} {}</h3>{}</div>",
                                             info.time, info.sha, formatDiff(abiMap, info.abi));
                      }) |
                      std::views::join | std::ranges::to<std::string>();
 
     const auto nav =
         detail::nav({{"Packages", "/"},
-                     {targetInfo->package, std::format("/find/{}", targetInfo->package)},
-                     {targetInfo->sha, std::format("/package/{}", targetInfo->sha)},
-                     {"Compare", std::format("/compare/{}", targetInfo->sha)}});
+                     {targetInfo->package, fmt::format("/find/{}", targetInfo->package)},
+                     {targetInfo->sha, fmt::format("/package/{}", targetInfo->sha)},
+                     {"Compare", fmt::format("/compare/{}", targetInfo->sha)}});
 
-    return detail::deliver(std::format("{}{}<div>{}</div>", nav, formatInfo(*targetInfo), str),
+    return detail::deliver(fmt::format("{}{}<div>{}</div>", nav, formatInfo(*targetInfo), str),
                            mode);
 }
 
-std::string find(std::string_view package, const Store& store, Mode mode) {
+struct CacheItem {
+    std::string_view version;
+    std::string_view arch;
+    size_t diskSize;
+    size_t downloads;
+    Time lastUse;
+    Time created;
+    std::string_view sha;
+};
+
+template <Sort S>
+decltype(auto) getCacheItem() {
+    using enum Sort;
+    if constexpr (S == Version)
+        return &CacheItem::version;
+    else if constexpr (S == Arch)
+        return &CacheItem::arch;
+    else if constexpr (S == Size)
+        return &CacheItem::diskSize;
+    else if constexpr (S == First)
+        return &CacheItem::created;
+    else if constexpr (S == Downloads)
+        return &CacheItem::downloads;
+    else if constexpr (S == Use)
+        return &CacheItem::lastUse;
+    else if constexpr (S == SHA)
+        return &CacheItem::sha;
+    else
+        return &CacheItem::created;
+}
+
+std::string find(std::string_view package, const Store& store, db::Database& db, Mode mode,
+                 Sort sort, Order order) {
     auto list = store.allInfos() |
                 std::views::filter([&](const auto& info) { return info.package == package; }) |
+                std::views::transform([&](const auto& info) -> CacheItem {
+                    const auto [downloads, lastUse] = db::getCacheDownloadsAndLastUse(db, info.sha);
+                    return {.version = info.version,
+                            .arch = info.arch,
+                            .diskSize = info.size,
+                            .downloads = downloads,
+                            .lastUse = lastUse,
+                            .created = info.time,
+                            .sha = info.sha};
+                }) |
                 std::ranges::to<std::vector>();
 
-    std::ranges::sort(list, std::greater<>{}, &Info::time);
+    constexpr auto table = []<size_t... Is>(std::integer_sequence<size_t, Is...>) {
+        return std::array{+[](decltype(list)& list, Order order) {
+            auto proj = getCacheItem<static_cast<Sort>(Is)>();
+            if (order == Order::Ascending) {
+                std::ranges::sort(list, std::less<>{}, proj);
+            } else {
+                std::ranges::sort(list, std::greater<>{}, proj);
+            }
+        }...};
+    }
+    (std::make_integer_sequence<size_t, std::to_underlying(Sort::NumSortMethods)>());
+    table[std::to_underlying(sort)](list, order);
 
-    const auto str = list | std::views::transform([&](const auto& info) {
-                         return std::format(
-                             "<li><pre>Version: {0:10} Arch: {1:25} "
-                             "Size: {2:14} Created: {3:%Y-%m-%d %H:%M} "
-                             "SHA: </pre>"
-                             R"(<button hx-get="/package/{4}?plain=1" hx-target="#content")"
-                             R"(  hx-swap="innerHTML"  hx-push-url="/package/{4}"> )"
-                             R"(    <pre>{4}</pre>)"
-                             R"(</button>)"
-                             R"(<button hx-get="/compare/{4}?plain=1" hx-target="#content")"
-                             R"(  hx-swap="innerHTML"  hx-push-url="/compare/{4}"> )"
-                             R"(    Compare)"
-                             R"(</button></li>)",
-                             info.version, info.arch, ByteSize{info.size}, info.time, info.sha);
+    const auto path = fmt::format("/find/{0}?plain=1", package);
+    const auto versionButton = button(path, "Version", Sort::Version, sort, order);
+    const auto archButton = button(path, "Arch", Sort::Arch, sort, order);
+    const auto sizeButton = button(path, "Size", Sort::Size, sort, order);
+    const auto downloadsButton = button(path, "Downloads", Sort::Downloads, sort, order);
+    const auto useButton = button(path, "Last Use", Sort::Use, sort, order);
+    const auto firstButton = button(path, "Created", Sort::First, sort, order);
+    const auto shaButton = button(path, "SHA", Sort::SHA, sort, order);
+
+    const auto headerRow = fmt::format(R"(
+            <div class="row">
+                <div class="col">{}</div>
+                <div class="col">{}</div>
+                <div class="col">{}</div>
+                <div class="col">{}</div>
+                <div class="col">{}</div>
+                <div class="col">{}</div>
+                <div class="col">{}</div>
+                <div class="col"></div>
+            </div>
+            )",
+                                       versionButton, archButton, sizeButton, downloadsButton,
+                                       useButton, firstButton, shaButton);
+
+    static constexpr std::string_view itemStr = R"(
+        <div class="row">
+            <div class="col">{0}</div>
+            <div class="col">{1}</div>
+            <div class="col">{2}</div>
+            <div class="col">{3}</div>
+            <div class="col">{4:%Y-%m-%d %H:%M}</div>
+            <div class="col">{5:%Y-%m-%d %H:%M}</div>
+            <div class="col">
+                <button hx-get="/package/{6}?plain=1" 
+                        hx-target="#content"
+                        hx-swap="innerHTML"  
+                        hx-push-url="/package/{6}"> 
+                    <pre>{7}</pre>
+                </button>
+            </div>
+            <div class="col">
+                <button hx-get="/compare/{6}?plain=1" 
+                        hx-target="#content"
+                        hx-swap="innerHTML" 
+                        hx-push-url="/compare/{6}">
+                    Compare
+                </button>
+            </div>
+        </div>
+    )";
+
+    const auto str = list | std::views::transform([&](const CacheItem& item) {
+                         return fmt::format(itemStr, item.version, item.arch,
+                                            ByteSize{item.diskSize}, item.downloads, item.lastUse,
+                                            item.created, item.sha, item.sha.substr(0, 15));
                      }) |
                      std::views::join | std::ranges::to<std::string>();
 
@@ -590,9 +669,10 @@ std::string find(std::string_view package, const Store& store, Mode mode) {
     const auto diskSize = std::accumulate(sizes.begin(), sizes.end(), size_t{0}, std::plus<>());
 
     const auto nav =
-        detail::nav({{"Packages", "/"}, {std::string{package}, std::format("/find/{}", package)}});
-    const auto content = std::format("{}<h4>Count: {}, Total Size: {}</h4><ol>{}</ol>", nav, count,
-                                     ByteSize{diskSize}, str);
+        detail::nav({{"Packages", "/"}, {std::string{package}, fmt::format("/find/{}", package)}});
+    const auto content = fmt::format(R"({}<h4>Count: {}, Total Size: {}</h4>)"
+                                     R"(<div class="container text-left align-middle">{}{}</div>)",
+                                     nav, count, ByteSize{diskSize}, headerRow, str);
 
     return detail::deliver(content, mode);
 }
@@ -600,16 +680,15 @@ std::string find(std::string_view package, const Store& store, Mode mode) {
 std::string sha(std::string_view sha, const Store& store, Mode mode) {
     const auto* info = store.info(sha);
     if (!info) {
-        return detail::deliver(std::format("<h1>Error</h1><div>Sha: {} not found</div>", sha),
+        return detail::deliver(fmt::format("<h1>Error</h1><div>Sha: {} not found</div>", sha),
                                mode);
-    } else {
-        const auto finfo = formatInfo(*info);
-        const auto nav = detail::nav({{"Packages", "/"},
-                                      {info->package, std::format("/find/{}", info->package)},
-                                      {info->sha, std::format("/package/{}", info->sha)}});
-
-        return detail::deliver(std::format("{}{}", nav, finfo), mode);
     }
+    const auto finfo = formatInfo(*info);
+    const auto nav = detail::nav({{"Packages", "/"},
+                                  {info->package, fmt::format("/find/{}", info->package)},
+                                  {info->sha, fmt::format("/package/{}", info->sha)}});
+
+    return detail::deliver(fmt::format("{}{}", nav, finfo), mode);
 }
 
 std::string favicon() { return std::string{html::favicon}; }

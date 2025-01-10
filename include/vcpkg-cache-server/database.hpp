@@ -5,7 +5,11 @@
 #include <optional>
 #include <ostream>
 #include <chrono>
+#include <fmt/format.h>
+#include <fmt/std.h>
+#include <fmt/chrono.h>
 
+// This is missing in clang?!?
 inline std::ostream& operator<<(std::ostream& dest, __int128_t value) {
     std::ostream::sentry s(dest);
     if (s) {
@@ -162,13 +166,17 @@ inline std::pair<size_t, Time> getPackageDownloadsAndLastUse(Database& db, std::
     return {downloads, Time{Duration{reps}}};
 }
 
-inline std::string formatTimeStamp(Rep rep) {
-    return rep != -1 ? std::format("{:%Y-%m-%d %H:%M}", Time{Duration{rep}})
-                     : std::string{"Unused"};
-}
+inline std::pair<size_t, Time> getCacheDownloadsAndLastUse(Database& db, std::string_view sha) {
+    using namespace sqlite_orm;
+    auto res = db.select(columns(&Cache::downloads, &Cache::lastUsed),
+                         where(c(&Cache::sha) == sha));
+    if (res.size() != 1) {
+        throw std::runtime_error("invalid cache sha");
+    }
 
-inline std::string formatTimeStamp(Time time) {
-    return formatTimeStamp(time.time_since_epoch().count());
+    const auto [downloads, reps] = res.front();
+
+    return {downloads, Time{Duration{reps}}};
 }
 
 }  // namespace vcache::db
