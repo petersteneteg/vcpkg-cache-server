@@ -7,7 +7,10 @@
     "default-registry": {
       "kind": "builtin",
       "baseline": "6062c8fe02d38b10d5291411bc235ae4d02cfe6c"
-    }
+    },
+    "overlay-ports": [
+      "./vcpkg"
+    ]
   },
   "dependencies": [
     { "name": "cpp-httplib", "features": ["brotli", "openssl", "zlib"] },
@@ -19,6 +22,7 @@
     "sqlite-orm",
     "rapidfuzz",
     "fmt",
+    "fast-float",
     "catch2"
   ]
 }

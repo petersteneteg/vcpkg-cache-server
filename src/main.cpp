@@ -14,6 +14,8 @@
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/sinks/basic_file_sink.h>
 
+#include <fast_float/fast_float.h>
+
 #include <filesystem>
 #include <fstream>
 #include <map>
@@ -52,6 +54,17 @@ auto logger(std::shared_ptr<spdlog::logger> log) {
             log->trace("{:>20}: {}", key, val);
         }
     };
+}
+
+template <typename T>
+auto strToNum(std::string_view str) -> std::optional<T> {
+    T num;
+    auto [p, ec] = fast_float::from_chars(str.data(), str.data() + str.size(), num);
+    if (ec != std::errc() || p != str.data() + str.size()) {
+        return std::nullopt;
+    } else {
+        return num;
+    }
 }
 
 std::pair<std::string_view, std::string_view> parseAuthHeader(std::string_view authHeader) {
@@ -168,7 +181,7 @@ void maintain(Store& store, db::Database& db, const Maintenance& maintenance,
                           const auto cutoff = now - maxAge;
 
                           log->info("[Maintain] Looking for packages created before: {} ({})",
-                                    cutoff, maxAge);
+                                    cutoff, FormatDuration{maxAge});
                           size_t removed{};
                           for (auto& cache : db.iterate<db::Cache>(where(and_(
                                    c(&db::Cache::deleted) == false,
@@ -186,7 +199,7 @@ void maintain(Store& store, db::Database& db, const Maintenance& maintenance,
                           const auto cutoff = now - maxUnused;
 
                           log->info("[Maintain] Looking for packages not used after: {} ({})",
-                                    cutoff, maxUnused);
+                                    cutoff, FormatDuration{maxUnused});
                           size_t removed{};
                           for (auto& cache : db.iterate<db::Cache>(where(and_(
                                    c(&db::Cache::deleted) == false,
@@ -279,8 +292,6 @@ void maintain(Store& store, db::Database& db, const Maintenance& maintenance,
 }
 
 }  // namespace vcache
-
-// Add tests?
 
 int main(int argc, char* argv[]) {
     using namespace vcache;
@@ -383,8 +394,10 @@ int main(int argc, char* argv[]) {
             }
         }));
 
-    const auto mode = [](const httplib::Request& req) {
-        return req.params.find("plain") != req.params.end() ? site::Mode::Plain : site::Mode::Full;
+    const auto mode = [](const httplib::Request& req) -> site::Mode {
+        return fp::mGet(req.params, "mode")
+            .and_then(enumTo<site::Mode>{})
+            .value_or(site::Mode::Full);
     };
 
     const auto sort = [](const httplib::Request& req) -> site::Sort {
@@ -392,10 +405,29 @@ int main(int argc, char* argv[]) {
             .and_then(enumTo<site::Sort>{})
             .value_or(site::Sort::Default);
     };
+    const auto sortIdx = [](const httplib::Request& req) -> std::optional<size_t> {
+        return fp::mGet(req.params, "sortidx").and_then(strToNum<size_t>);
+    };
+
+    const auto selection =
+        [](const httplib::Request& req) -> std::optional<std::pair<site::Sort, std::string>> {
+        auto selCol = fp::mGet(req.params, "selcol").and_then(enumTo<site::Sort>{});
+        auto selVal = fp::mGet(req.params, "selval");
+        if (selCol && selVal) {
+            return std::pair<site::Sort, std::string>{*selCol, *selVal};
+        } else {
+            return std::nullopt;
+        }
+    };
+
     const auto order = [](const httplib::Request& req) -> site::Order {
         return fp::mGet(req.params, "order")
             .and_then(enumTo<site::Order>{})
             .value_or(site::Order::Ascending);
+    };
+    const auto limit = [](const httplib::Request& req) -> site::Limit {
+        return {.offset = fp::mGet(req.params, "offset").and_then(strToNum<size_t>),
+                .limit = fp::mGet(req.params, "limit").and_then(strToNum<size_t>)};
     };
 
     const auto search = [](const httplib::Request& req) -> std::string {
@@ -428,6 +460,12 @@ int main(int argc, char* argv[]) {
         res.set_content(site::sha(sha, store, mode(req)), "text/html");
     });
 
+    server->Get(R"(/downloads)", [&](const httplib::Request& req, httplib::Response& res) {
+        res.set_content(
+            site::downloads(db, mode(req), sortIdx(req), order(req), limit(req), selection(req)),
+            "text/html");
+    });
+
     server->Get("/index.html", [&](const httplib::Request& req, httplib::Response& res) {
         res.set_content(site::index(store, db, mode(req), sort(req), order(req), search(req)),
                         "text/html");
@@ -458,9 +496,10 @@ int main(int argc, char* argv[]) {
             "text/html");
     });
     server->set_exception_handler(
-        [](const httplib::Request&, httplib::Response& res, std::exception_ptr ep) {
-            res.set_content(fmt::format("<h1>Error 500</h1><p>{}</p>", fp::exceptionToString(ep)),
-                            "text/html");
+        [&](const httplib::Request&, httplib::Response& res, std::exception_ptr ep) {
+            const auto error = fp::exceptionToString(ep);
+            log->error(error);
+            res.set_content(fmt::format("<h1>Error 500</h1><p>{}</p>", error), "text/html");
             res.status = httplib::StatusCode::InternalServerError_500;
         });
 

@@ -15,6 +15,7 @@
 #include <set>
 #include <string>
 #include <numeric>
+#include <tuple>
 
 #include <rapidfuzz/fuzz.hpp>
 
@@ -235,7 +236,7 @@ std::string button(std::string_view url, std::string_view content, Sort tag, Sor
                   link-offset-2-hover 
                   link-underline-opacity-0 
                   link-underline-opacity-75-hover" 
-           hx-get="{0}?plain=1&sort={1}&order={2}"
+           hx-get="{0}?mode=plain&sort={1}&order={2}"
            hx-target="#content" 
            hx-swap="innerHTML" 
            hx-push-url="{0}?sort={1}&order={2}">
@@ -269,23 +270,113 @@ std::string button(std::string_view url, std::string_view content, Sort tag, Sor
     return fmt::format(str, url, tag, newOrder, content, indicator);
 }
 
+std::string buttonIdx(Url url, std::string_view content, size_t sortIdx, size_t currentSortIdx,
+                      Order currentOrder) {
+    static constexpr std::string_view str = R"(
+        <a class="pointer link-underline 
+                  link-offset-2-hover 
+                  link-underline-opacity-0 
+                  link-underline-opacity-75-hover" 
+           hx-get="{0}"
+           hx-target="#content" 
+           hx-swap="innerHTML" 
+           hx-push-url="{1}">
+            {2}{3}
+        </a>
+    )";
+
+    static constexpr std::string_view upArrow = "&#8593";
+    static constexpr std::string_view downArrow = "&#8595";
+
+    const auto indicator = [&]() {
+        if (sortIdx == currentSortIdx) {
+            if (currentOrder == Order::Ascending) {
+                return upArrow;
+            } else {
+                return downArrow;
+            }
+        } else {
+            return std::string_view{};
+        }
+    }();
+
+    const auto newOrder = [&]() {
+        if (sortIdx == currentSortIdx) {
+            return currentOrder == Order::Ascending ? Order::Descending : Order::Ascending;
+        } else {
+            return Order::Ascending;
+        }
+    }();
+
+    url.params["sortidx"] = fmt::to_string(sortIdx);
+    url.params["order"] = fmt::to_string(newOrder);
+
+    url.params["mode"] = "plain";
+    const auto plainUrl = fmt::to_string(url);
+
+    url.params["mode"] = "full";
+    const auto fullUrl = fmt::to_string(url);
+
+    return fmt::format(str, plainUrl, fullUrl, content, indicator);
+}
+
 std::string navItem(std::string_view name, std::string_view url, bool active) {
     static constexpr std::string_view str = R"(
-        <li class="breadcrumb-item {0}">
+        <li class="breadcrumb-item">
             <a class="pointer link-underline 
                       link-offset-2-hover 
                       link-underline-opacity-0 
                       link-underline-opacity-75-hover" 
-               hx-get="{1}?plain=1" 
+               hx-get="{0}?mode=plain" 
                hx-target="#content" 
                hx-swap="innerHTML" 
-               hx-push-url={1}>
-                {2}
+               hx-push-url={0}>
+                {1}
             </a>
         </li>
     )";
+    if (active) {
+        return fmt::format(R"(<li class="breadcrumb-item active">{}</li>)", name);
+    } else {
+        return fmt::format(str, url, name);
+    }
+}
 
-    return fmt::format(str, active ? "active" : "", url, name);
+std::string link(std::string_view url, std::string_view content) {
+    static constexpr std::string_view str = R"(
+        <a class="pointer link-underline 
+                    link-offset-2-hover 
+                    link-underline-opacity-0 
+                    link-underline-opacity-75-hover" 
+            hx-get="{0}?mode=plain" 
+            hx-target="#content" 
+            hx-swap="innerHTML" 
+            hx-push-url={0}>
+            {1}
+        </a>)";
+    return fmt::format(str, url, content);
+}
+
+std::string downloadsLink(Params params) {
+    Url purl{.path = "/downloads", .params = {{"mode", "plain"}}};
+    Url furl{.path = "/downloads", .params = {{"mode", "full"}}};
+    purl.params.insert_range(params);
+    furl.params.insert_range(params);
+
+    constexpr std::string_view str = R"(
+        <div class="d-inline-block float-end fs-4">
+            <a class="pointer link-underline 
+                    link-offset-2-hover 
+                    link-underline-opacity-0 
+                    link-underline-opacity-75-hover" 
+                hx-get="{}" 
+                hx-target="#content" 
+                hx-swap="innerHTML" 
+                hx-push-url={}>
+                    Downloads
+            </a>
+        </div>)";
+    return fmt::format(str, purl, furl);
 }
 
 }  // namespace
@@ -297,13 +388,7 @@ std::string detail::nav(const std::vector<std::pair<std::string, std::string>>& 
                      }) |
                      std::views::join | std::ranges::to<std::string>();
 
-    return fmt::format(R"(
-    <nav>
-        <ol class="breadcrumb fs-4">
-            {}
-        </ol>
-    </nav>
-    )",
+    return fmt::format(R"(<nav class="d-inline-block"><ol class="breadcrumb fs-4">{}</ol></nav>)",
                        str);
 }
 
@@ -404,7 +489,7 @@ std::string index(const Store& store, db::Database& db, Mode mode, Sort sort, Or
         <div class="row">
             <div class="col">
                 <button class="btn btn-link btn-sm"
-                        hx-get="/find/{0}?plain=1" hx-target="#content" 
+                        hx-get="/find/{0}?mode=plain" hx-target="#content" 
                         hx-swap="innerHTML" hx-push-url="/find/{0}">
                     <b>{0}</b>
                 </button>
@@ -460,26 +545,26 @@ std::string index(const Store& store, db::Database& db, Mode mode, Sort sort, Or
     const auto nav = detail::nav({{"Packages", "/"}});
 
     static constexpr std::string_view html = R"(
-        {0}
+        <div>{0}{1}</div>
         <input class="form-control"
                id="search"
                type="search"
                name="search"
-               value="{1}"
+               value="{2}"
                placeholder="Search Packages..."
-               hx-get="?plain=1" 
+               hx-get="?mode=plain" 
                hx-target="#content" 
                hx-swap="innerHTML"
                hx-trigger="input changed delay:500ms, keyup[key=='Enter']"
                hx-indicator=".htmx-indicator">
-        <h4>{2}</h4>
+        <h4>{3}</h4>
         <span class="htmx-indicator">Searching...</span>
         <div class="container text-left align-middle">
-            {3}
             {4}
+            {5}
         </div>
     )";
-    const auto content = fmt::format(html, nav, search, stats, headerRow, str);
+    const auto content = fmt::format(html, nav, downloadsLink({}), search, stats, headerRow, str);
 
     return detail::deliver(content, mode);
 }
@@ -602,7 +687,7 @@ std::string find(std::string_view package, const Store& store, db::Database& db,
     (std::make_integer_sequence<size_t, std::to_underlying(Sort::NumSortMethods)>());
     table[std::to_underlying(sort)](list, order);
 
-    const auto path = fmt::format("/find/{0}?plain=1", package);
+    const auto path = fmt::format("/find/{0}?mode=plain", package);
     const auto versionButton = button(path, "Version", Sort::Version, sort, order);
     const auto archButton = button(path, "Arch", Sort::Arch, sort, order);
     const auto sizeButton = button(path, "Size", Sort::Size, sort, order);
@@ -635,7 +720,7 @@ std::string find(std::string_view package, const Store& store, db::Database& db,
             <div class="col">{4:%Y-%m-%d %H:%M}</div>
             <div class="col">{5:%Y-%m-%d %H:%M}</div>
             <div class="col">
-                <button hx-get="/package/{6}?plain=1" 
+                <button hx-get="/package/{6}?mode=plain" 
                         hx-target="#content"
                         hx-swap="innerHTML"  
                         hx-push-url="/package/{6}"> 
@@ -643,7 +728,7 @@ std::string find(std::string_view package, const Store& store, db::Database& db,
                 </button>
             </div>
             <div class="col">
-                <button hx-get="/compare/{6}?plain=1" 
+                <button hx-get="/compare/{6}?mode=plain" 
                         hx-target="#content"
                         hx-swap="innerHTML" 
                         hx-push-url="/compare/{6}">
@@ -670,9 +755,11 @@ std::string find(std::string_view package, const Store& store, db::Database& db,
 
     const auto nav =
         detail::nav({{"Packages", "/"}, {std::string{package}, fmt::format("/find/{}", package)}});
-    const auto content = fmt::format(R"({}<h4>Count: {}, Total Size: {}</h4>)"
-                                     R"(<div class="container text-left align-middle">{}{}</div>)",
-                                     nav, count, ByteSize{diskSize}, headerRow, str);
+    const auto content =
+        fmt::format(R"(<div>{}{}</div><h4>Count: {}, Total Size: {}</h4>)"
+                    R"(<div class="container text-left align-middle">{}{}</div>)",
+                    nav, downloadsLink({{"selcol", "name"}, {"selval", std::string{package}}}),
+                    count, ByteSize{diskSize}, headerRow, str);
 
     return detail::deliver(content, mode);
 }
@@ -684,11 +771,149 @@ std::string sha(std::string_view sha, const Store& store, Mode mode) {
                                mode);
     }
     const auto finfo = formatInfo(*info);
-    const auto nav = detail::nav({{"Packages", "/"},
-                                  {info->package, fmt::format("/find/{}", info->package)},
-                                  {info->sha, fmt::format("/package/{}", info->sha)}});
+    const auto nav =
+        detail::nav({{"Packages", "/"},
+                     {info->package, fmt::format("/find/{}", info->package)},
+                     {info->sha.substr(0, 16), fmt::format("/package/{}", info->sha)}});
 
-    return detail::deliver(fmt::format("{}{}", nav, finfo), mode);
+    return detail::deliver(
+        fmt::format("<div>{}{}</div>{}", nav, downloadsLink({{"selcol", "sha"}, {"selval", info->sha}}),
+                    finfo),
+        mode);
+}
+
+struct AgeAlias : sqlite_orm::alias_tag {
+    static const std::string& get() {
+        static const std::string res = "Age";
+        return res;
+    }
+};
+
+auto colNames(const auto& stmt) {
+    constexpr auto count = decltype(stmt.expression.col)::count;
+    std::array<std::string, count> names{};
+    for (int i = 0; i < count; ++i) {
+        names[i] = stmt.column_name(i);
+    }
+    return names;
+}
+
+auto executeQueary(db::Database& db, auto& cols, auto& orderBy, Limit limits,
+                   std::optional<std::pair<Sort, std::string>> selection) {
+    using namespace sqlite_orm;
+
+    const auto join1 = inner_join<db::Cache>(on(c(&db::Download::cache) == &db::Cache::id));
+    const auto join2 = inner_join<db::Package>(on(c(&db::Cache::package) == &db::Package::id));
+    const auto lim = limit(limits.offset.value_or(size_t{0}), limits.limit.value_or(size_t{100}));
+
+    if (selection && selection->first == Sort::SHA) {
+        const auto w = where(c(&db::Cache::sha) == selection->second);
+        const auto stmt = db.prepare(select(cols, join1, join2, w, orderBy, lim));
+        return std::tuple{db.execute(stmt), colNames(stmt)};
+    } else if (selection && selection->first == Sort::Name) {
+        const auto w = where(c(&db::Package::name) == selection->second);
+        const auto stmt = db.prepare(select(cols, join1, join2, w, orderBy, lim));
+        return std::tuple{db.execute(stmt), colNames(stmt)};
+    } else if (selection && selection->first == Sort::Ip) {
+        const auto w = where(c(&db::Download::ip) == selection->second);
+        const auto stmt = db.prepare(select(cols, join1, join2, w, orderBy, lim));
+        return std::tuple{db.execute(stmt), colNames(stmt)};
+    } else if (selection && selection->first == Sort::User) {
+        const auto w = where(c(&db::Download::user) == selection->second);
+        const auto stmt = db.prepare(select(cols, join1, join2, w, orderBy, lim));
+        return std::tuple{db.execute(stmt), colNames(stmt)};
+    } else {
+        const auto stmt = db.prepare(select(cols, join1, join2, orderBy, lim));
+        return std::tuple{db.execute(stmt), colNames(stmt)};
+    }
+}
+
+std::string downloads(db::Database& db, Mode mode, std::optional<size_t> sortIdx, Order order,
+                      Limit limits, std::optional<std::pair<Sort, std::string>> selection) {
+
+    using namespace sqlite_orm;
+
+    const auto cols = columns(&db::Download::time, &db::Download::ip, &db::Download::user,
+                              &db::Package::name, &db::Package::downloads, &db::Cache::size,
+                              (c(&db::Download::time) - c(&db::Cache::created)), &db::Cache::sha);
+
+    auto orderBy = dynamic_order_by(db);
+    constexpr auto table = []<size_t... Is>(std::integer_sequence<size_t, Is...>) {
+        return std::array{+[](decltype(orderBy)& ordering, decltype(cols)& cols, Order order) {
+            auto item = order_by(std::get<Is>(cols.columns));
+            ordering.push_back(setOrder(item, order));
+        }...};
+    }
+    (std::make_integer_sequence<size_t, cols.count>());
+    table[sortIdx.value_or(size_t{0})](orderBy, cols, order);
+
+    auto [data, names] = executeQueary(db, cols, orderBy, limits, selection);
+
+    constexpr std::array<std::string_view, cols.count> widths{"",   "",   "-1", "",
+                                                              "-1", "-1", "",   "-1"};
+    names[6] = "age";
+
+    Url url{.path = "/downloads"};
+    if (selection) {
+        url.params["selcol"] = fmt::to_string(selection->first);
+        url.params["selval"] = selection->second;
+    }
+
+    const auto header = [&]<size_t... Is>(std::integer_sequence<size_t, Is...>) {
+        return std::array{[&]() {
+            const auto button = buttonIdx(url, names[Is], Is, sortIdx.value_or(size_t{0}), order);
+            return fmt::format(R"(<div class="col{}">{}</div>)", widths[Is], button);
+        }()...};
+    }
+    (std::make_integer_sequence<size_t, cols.count>());
+    const auto headerRow = fmt::format(R"(<div class="row">{}</div>)",
+                                       header | std::views::join | std::ranges::to<std::string>());
+
+    static constexpr std::string_view itemStr = R"(
+        <div class="row" {8}>
+            <div class="col">{0:%Y-%m-%d %H:%M}</div>
+            <div class="col">{1}</div>
+            <div class="col-1">{2}</div>
+            <div class="col">{3}</div>
+            <div class="col-1">{4}</div>
+            <div class="col-1">{5}</div>
+            <div class="col">{6}</div>
+            <div class="col-1">{7}</div>
+        </div>
+        )";
+
+    auto turl = url;
+    turl.params["mode"] = "append";
+    turl.params["sortidx"] = fmt::to_string(sortIdx.value_or(size_t{0}));
+    turl.params["order"] = fmt::to_string(order);
+    turl.params["offset"] =
+        fmt::to_string(limits.offset.value_or(size_t{0}) + limits.limit.value_or(size_t{100}));
+
+    const auto trigger =
+        fmt::format(R"( hx-get="{}" hx-trigger="revealed" hx-swap="afterend")", turl);
+
+    const auto str =
+        std::views::zip(std::views::iota(size_t{1}), data) |
+        std::views::transform([&](auto&& countAndItem) {
+            auto&& [count, item] = countAndItem;
+            auto&& [time, ip, user, name, downloads, size, age, sha] = item;
+            return fmt::format(itemStr, Time{Duration{time}}, ip, user,
+                               link(fmt::format("/find/{}", name), name), downloads, ByteSize{size},
+                               FormatDuration{static_cast<Rep>(age)},
+                               link(fmt::format("/package/{}", sha), sha.substr(0, 10)),
+                               (count == data.size() ? trigger : std::string{}));
+        }) |
+        std::views::join | std::ranges::to<std::string>();
+
+    if (mode == Mode::Append) {
+        return str;
+    }
+
+    const auto content = fmt::format(R"(<h4>Downloads</h4>)"
+                                     R"(<div class="container text-left align-middle">{}{}</div>)",
+                                     headerRow, str);
+
+    return detail::deliver(content, mode);
 }
 
 std::string favicon() { return std::string{html::favicon}; }

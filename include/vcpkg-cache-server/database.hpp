@@ -168,8 +168,8 @@ inline std::pair<size_t, Time> getPackageDownloadsAndLastUse(Database& db, std::
 
 inline std::pair<size_t, Time> getCacheDownloadsAndLastUse(Database& db, std::string_view sha) {
     using namespace sqlite_orm;
-    auto res = db.select(columns(&Cache::downloads, &Cache::lastUsed),
-                         where(c(&Cache::sha) == sha));
+    auto res =
+        db.select(columns(&Cache::downloads, &Cache::lastUsed), where(c(&Cache::sha) == sha));
     if (res.size() != 1) {
         throw std::runtime_error("invalid cache sha");
     }

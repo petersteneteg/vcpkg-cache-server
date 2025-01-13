@@ -179,6 +179,11 @@ constexpr bool is_detected_convertible_v = is_detected_convertible<To, Op, Args.
 
 enum struct ByteSize : size_t {};
 
+struct FormatDuration : Duration {
+    FormatDuration(Duration d) : Duration{d} {};
+    using Duration::Duration;
+};
+
 template <typename T>
 struct FlagFormatter : fmt::formatter<std::string_view> {
     template <typename U>
@@ -199,6 +204,15 @@ struct FlagFormatter : fmt::formatter<std::string_view> {
 
 template <typename T>
 struct enumTo {};
+
+template <typename T>
+struct FmtSel {
+    bool sel;
+    T a;
+    T b;
+};
+template <typename T>
+FmtSel(bool, T, T) -> FmtSel<T>;
 
 }  // namespace vcache
 
@@ -396,5 +410,73 @@ struct fmt::formatter<vcache::Time, char> {
             return it;
         }
         return formatter.format(vcache::Clock::to_sys(time), ctx);
+    }
+};
+
+template <>
+struct fmt::formatter<vcache::FormatDuration> {
+    template <class ParseContext>
+    constexpr ParseContext::iterator parse(ParseContext& ctx) {
+        auto it = ctx.begin();
+        if (it != ctx.end() && *it != '}') {
+            throw format_error("Invalid unit format found");
+        }
+        return it;
+    }
+
+    template <class FmtContext>
+    constexpr FmtContext::iterator format(vcache::FormatDuration d, FmtContext& ctx) const {
+
+        using namespace std::chrono_literals;
+        using std::chrono::duration_cast;
+        namespace c = std::chrono;
+
+        const auto years = duration_cast<c::years>(d);
+        d -= years;
+        const auto days = duration_cast<c::days>(d);
+        d -= days;
+        const auto hours = duration_cast<c::hours>(d);
+        d -= hours;
+        const auto minutes = duration_cast<c::minutes>(d);
+        d -= minutes;
+        const auto seconds = duration_cast<c::seconds>(d);
+
+        auto it = ctx.out();
+        if (years != c::years{}) {
+            fmt::format_to(it, "{:%Q}y ", years);
+        }
+        if (days != c::days{}) {
+            fmt::format_to(it, "{:%Q}d ", days);
+        }
+        if (hours != c::hours{}) {
+            fmt::format_to(it, "{:%Q}h ", hours);
+        }
+        if (minutes != c::minutes{}) {
+            fmt::format_to(it, "{:%Q}m ", minutes);
+        }
+        if (seconds != c::seconds{}) {
+            fmt::format_to(it, "{:%Q}s ", seconds);
+        }
+
+        return it;
+    }
+};
+
+template <typename T>
+struct fmt::formatter<vcache::FmtSel<T>> {
+    fmt::formatter<T> formatter;
+
+    template <class ParseContext>
+    constexpr ParseContext::iterator parse(ParseContext& ctx) {
+        return formatter.parse(ctx);
+    }
+
+    template <class FmtContext>
+    constexpr FmtContext::iterator format(const vcache::FmtSel<T>& opt, FmtContext& ctx) const {
+        if (opt.sel) {
+            return formatter.format(opt.a, ctx);
+        } else {
+            return formatter.format(opt.b, ctx);
+        }
     }
 };
