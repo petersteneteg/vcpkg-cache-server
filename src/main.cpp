@@ -420,10 +420,8 @@ int main(int argc, char* argv[]) {
         }
     };
 
-    const auto order = [](const httplib::Request& req) -> site::Order {
-        return fp::mGet(req.params, "order")
-            .and_then(enumTo<site::Order>{})
-            .value_or(site::Order::Ascending);
+    const auto order = [](const httplib::Request& req) -> std::optional<site::Order> {
+        return fp::mGet(req.params, "order").and_then(enumTo<site::Order>{});
     };
     const auto limit = [](const httplib::Request& req) -> site::Limit {
         return {.offset = fp::mGet(req.params, "offset").and_then(strToNum<size_t>),

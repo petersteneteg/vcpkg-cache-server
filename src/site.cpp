@@ -146,7 +146,9 @@ namespace {
 
 size_t missmatches(const auto& map1, const auto& map2) {
     auto keys = map1 | std::views::keys | std::ranges::to<std::set>();
-    keys.insert_range(map2 | std::views::keys);
+
+    const auto keys2 = map2 | std::views::keys;
+    keys.insert(keys2.begin(), keys2.end());
 
     return std::transform_reduce(
         std::begin(keys), std::end(keys), size_t{0}, std::plus<>{}, [&](const auto& key) {
@@ -161,7 +163,8 @@ size_t missmatches(const auto& map1, const auto& map2) {
 
 std::string formatDiff(const auto& dstMap, const auto& srcMap) {
     auto keys = dstMap | std::views::keys | std::ranges::to<std::set>();
-    keys.insert_range(srcMap | std::views::keys);
+    const auto srcKeys = srcMap | std::views::keys;
+    keys.insert(srcKeys.begin(), srcKeys.end());
 
     std::string buff;
     fmt::format_to(std::back_inserter(buff), "<dl>");
@@ -360,8 +363,8 @@ std::string link(std::string_view url, std::string_view content) {
 std::string downloadsLink(Params params) {
     Url purl{.path = "/downloads", .params = {{"mode", "plain"}}};
     Url furl{.path = "/downloads", .params = {{"mode", "full"}}};
-    purl.params.insert_range(params);
-    furl.params.insert_range(params);
+    purl.params.insert(params.begin(), params.end());
+    furl.params.insert(params.begin(), params.end());
 
     constexpr std::string_view str = R"(
         <div class="d-inline-block float-end fs-4">
@@ -434,8 +437,9 @@ decltype(auto) getRowItem() {
         return nullptr;
 }
 
-std::string index(const Store& store, db::Database& db, Mode mode, Sort sort, Order order,
-                  std::string_view search) {
+std::string index(const Store& store, db::Database& db, Mode mode, Sort sort,
+                  std::optional<Order> maybeOrder, std::string_view search) {
+    const auto order = maybeOrder.value_or(Order::Ascending);
     const auto keys =
         store.allInfos() | std::views::transform(&Info::package) | std::ranges::to<std::set>();
 
@@ -659,7 +663,9 @@ decltype(auto) getCacheItem() {
 }
 
 std::string find(std::string_view package, const Store& store, db::Database& db, Mode mode,
-                 Sort sort, Order order) {
+                 Sort sort, std::optional<Order> maybeOrder) {
+    const auto order = maybeOrder.value_or(Order::Ascending);
+
     auto list = store.allInfos() |
                 std::views::filter([&](const auto& info) { return info.package == package; }) |
                 std::views::transform([&](const auto& info) -> CacheItem {
@@ -673,6 +679,9 @@ std::string find(std::string_view package, const Store& store, db::Database& db,
                             .sha = info.sha};
                 }) |
                 std::ranges::to<std::vector>();
+
+    const auto archs = list | std::views::transform(&CacheItem::arch) | std::ranges::to<std::set>();
+    // Todo make selectable
 
     constexpr auto table = []<size_t... Is>(std::integer_sequence<size_t, Is...>) {
         return std::array{+[](decltype(list)& list, Order order) {
@@ -777,8 +786,8 @@ std::string sha(std::string_view sha, const Store& store, Mode mode) {
                      {info->sha.substr(0, 16), fmt::format("/package/{}", info->sha)}});
 
     return detail::deliver(
-        fmt::format("<div>{}{}</div>{}", nav, downloadsLink({{"selcol", "sha"}, {"selval", info->sha}}),
-                    finfo),
+        fmt::format("<div>{}{}</div>{}", nav,
+                    downloadsLink({{"selcol", "sha"}, {"selval", info->sha}}), finfo),
         mode);
 }
 
@@ -828,8 +837,9 @@ auto executeQueary(db::Database& db, auto& cols, auto& orderBy, Limit limits,
     }
 }
 
-std::string downloads(db::Database& db, Mode mode, std::optional<size_t> sortIdx, Order order,
-                      Limit limits, std::optional<std::pair<Sort, std::string>> selection) {
+std::string downloads(db::Database& db, Mode mode, std::optional<size_t> sortIdx,
+                      std::optional<Order> order, Limit limits,
+                      std::optional<std::pair<Sort, std::string>> selection) {
 
     using namespace sqlite_orm;
 
@@ -845,7 +855,7 @@ std::string downloads(db::Database& db, Mode mode, std::optional<size_t> sortIdx
         }...};
     }
     (std::make_integer_sequence<size_t, cols.count>());
-    table[sortIdx.value_or(size_t{0})](orderBy, cols, order);
+    table[sortIdx.value_or(size_t{0})](orderBy, cols, order.value_or(Order::Descending));
 
     auto [data, names] = executeQueary(db, cols, orderBy, limits, selection);
 
@@ -861,7 +871,8 @@ std::string downloads(db::Database& db, Mode mode, std::optional<size_t> sortIdx
 
     const auto header = [&]<size_t... Is>(std::integer_sequence<size_t, Is...>) {
         return std::array{[&]() {
-            const auto button = buttonIdx(url, names[Is], Is, sortIdx.value_or(size_t{0}), order);
+            const auto button = buttonIdx(url, names[Is], Is, sortIdx.value_or(size_t{0}),
+                                          order.value_or(Order::Descending));
             return fmt::format(R"(<div class="col{}">{}</div>)", widths[Is], button);
         }()...};
     }

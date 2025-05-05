@@ -57,18 +57,19 @@ std::string compare(std::string_view sha, const Store& store, Mode mode);
 std::string match(std::string_view abi, std::string_view package, const Store& store);
 std::string list(const Store& store);
 std::string find(std::string_view package, const Store& store, db::Database& db, Mode mode,
-                 Sort sort, Order order);
+                 Sort sort, std::optional<Order> order);
 std::string sha(std::string_view package, const Store& store, Mode mode);
 std::string favicon();
 std::string maskicon();
 
 std::optional<std::pair<std::string, std::string>> script(std::string_view name);
 
-std::string downloads(db::Database& db, Mode mode, std::optional<size_t> sortIdx, Order order,
-                      Limit limit, std::optional<std::pair<Sort, std::string>> selection);
+std::string downloads(db::Database& db, Mode mode, std::optional<size_t> sortIdx,
+                      std::optional<Order> order, Limit limit,
+                      std::optional<std::pair<Sort, std::string>> selection);
 
-std::string index(const Store& store, db::Database& db, Mode mode, Sort sort, Order order,
-                  std::string_view search);
+std::string index(const Store& store, db::Database& db, Mode mode, Sort sort,
+                  std::optional<Order> order, std::string_view search);
 
 namespace detail {
 
