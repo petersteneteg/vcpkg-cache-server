@@ -175,6 +175,12 @@ using is_detected_convertible = std::is_convertible<detected_t<Op, Args...>, To>
 template <class To, template <class...> class Op, class... Args>
 constexpr bool is_detected_convertible_v = is_detected_convertible<To, Op, Args...>::value;
 
+// GCC 14 does not support ranges::to
+template <typename T, typename R>
+auto fromRange(R&& range) {
+    return T(std::begin(range), std::end(range));
+}
+
 }  // namespace fp
 
 enum struct ByteSize : size_t {};
