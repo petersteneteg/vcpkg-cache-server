@@ -134,7 +134,9 @@ fp::UnorderedStringMap<std::pair<InfoState, Info>> scan(const std::filesystem::p
 
 Info extractInfo(const std::filesystem::path& path) {
     libzippp::ZipArchive zf{path.generic_string()};
-    zf.open(libzippp::ZipArchive::ReadOnly);
+    if (!zf.open(libzippp::ZipArchive::ReadOnly)) {
+        throw std::runtime_error(fmt::format("Unable to open file {}", path));
+    }
 
     auto ctrl = zf.getEntry("CONTROL");
     if (ctrl.isNull()) {
@@ -175,7 +177,7 @@ StoreWriter::StoreWriter(Store& store, std::pair<InfoState, Info>& infoItem,
     , path{path}
     , stream{path, std::ios_base::out | std::ios_base::binary} {
 
-    if (stream.bad()) {
+    if (!stream.good()) {
         throw std::runtime_error(fmt::format("Unable to write to file {}", path));
     }
 }
@@ -183,6 +185,9 @@ StoreWriter::StoreWriter(Store& store, std::pair<InfoState, Info>& infoItem,
 StoreWriter::~StoreWriter() {
     try {
         stream.close();
+        if (!stream.good()) {
+            throw std::runtime_error(fmt::format("Unable to write to file {}", path));
+        }
         infoItem.second = extractInfo(path);
         {
             std::scoped_lock lock{store.smtx};
