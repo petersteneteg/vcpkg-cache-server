@@ -172,13 +172,13 @@ Info extractInfo(const std::filesystem::path& path) {
 
 StoreWriter::StoreWriter(Store& store, std::pair<InfoState, Info>& infoItem,
                          const std::filesystem::path& path, typename Store::Token)
-    : store{store}
-    , infoItem{infoItem}
-    , path{path}
-    , stream{path, std::ios_base::out | std::ios_base::binary} {
+    : store{store}, infoItem{infoItem}, path{path}, stream{[&]() {
+        std::filesystem::create_directories(path.parent_path());
+        return std::ofstream{path, std::ios_base::out | std::ios_base::binary};
+    }()} {
 
     if (!stream.good()) {
-        throw std::runtime_error(fmt::format("Unable to write to file {}", path));
+        throw std::runtime_error(fmt::format("Unable to open file for writing {}", path));
     }
 }
 
@@ -186,7 +186,7 @@ StoreWriter::~StoreWriter() {
     try {
         stream.close();
         if (!stream.good()) {
-            throw std::runtime_error(fmt::format("Unable to write to file {}", path));
+            throw std::runtime_error(fmt::format("Unable to close file {}", path));
         }
         infoItem.second = extractInfo(path);
         {
