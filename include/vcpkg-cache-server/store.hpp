@@ -14,6 +14,8 @@
 #include <shared_mutex>
 #include <memory>
 
+#include <fmt/std.h>
+
 namespace vcache {
 
 using Time = std::filesystem::file_time_type;
