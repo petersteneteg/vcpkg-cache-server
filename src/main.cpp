@@ -298,6 +298,7 @@ int main(int argc, char* argv[]) {
 
     const auto settings = parseArgs(argc, argv);
     auto log = createLog(settings.logLevel, settings.logFile);
+    log->flush_on(spdlog::level::trace);
 
     auto db = db::create(settings.dbFile);
 

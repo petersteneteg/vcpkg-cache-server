@@ -97,7 +97,7 @@ private:
 class StoreReader {
 public:
     StoreReader(Store& store, std::pair<InfoState, Info>& infoItem, typename Store::Token)
-        :  infoItem{infoItem}
+        : infoItem{infoItem}
         , stream{store.shaToPath(infoItem.second.sha), std::ios_base::in | std::ios_base::binary} {}
 
     std::ifstream& getStream() { return stream; }
@@ -115,14 +115,23 @@ public:
         : store{store}
         , infoItem{infoItem}
         , path{path}
-        , stream{path, std::ios_base::out | std::ios_base::binary} {}
+        , stream{path, std::ios_base::out | std::ios_base::binary} {
+
+        if (stream.bad()) {
+            throw std::runtime_error(fmt::format("Unable to write to file {}", path));
+        }
+    }
 
     ~StoreWriter() {
-        stream.close();
-        infoItem.second = extractInfo(path);
-        {
-            std::scoped_lock lock{store.smtx};
-            infoItem.first = InfoState::Valid;
+        try {
+            stream.close();
+            infoItem.second = extractInfo(path);
+            {
+                std::scoped_lock lock{store.smtx};
+                infoItem.first = InfoState::Valid;
+            }
+        } catch (const std::exception& e) {
+            store.log->error("Unable to close writer of: {} due to: {}", path, e.what());
         }
     }
 

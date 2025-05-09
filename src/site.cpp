@@ -614,11 +614,12 @@ std::string compare(std::string_view sha, const Store& store, Mode mode) {
     std::ranges::sort(matches, std::less<>{},
                       [&](const auto& info) { return missmatches(info.abi, abiMap); });
 
-    const auto str = fp::fromRange<std::string>(matches | std::views::take(5) | std::views::transform([&](const auto& info) {
-                         return fmt::format("<div><h3>Time: {:%Y-%m-%d %H:%M:%S} {}</h3>{}</div>",
-                                            info.time, info.sha, formatDiff(abiMap, info.abi));
-                     }) |
-                     std::views::join | std::views::common);
+    const auto str = fp::fromRange<std::string>(
+        matches | std::views::take(5) | std::views::transform([&](const auto& info) {
+            return fmt::format("<div><h3>Time: {:%Y-%m-%d %H:%M:%S} {}</h3>{}</div>", info.time,
+                               info.sha, formatDiff(abiMap, info.abi));
+        }) |
+        std::views::join | std::views::common);
 
     const auto nav =
         detail::nav({{"Packages", "/"},
