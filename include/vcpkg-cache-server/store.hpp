@@ -14,8 +14,6 @@
 #include <shared_mutex>
 #include <memory>
 
-#include <fmt/std.h>
-
 namespace vcache {
 
 using Time = std::filesystem::file_time_type;
@@ -113,29 +111,8 @@ private:
 class StoreWriter {
 public:
     StoreWriter(Store& store, std::pair<InfoState, Info>& infoItem,
-                const std::filesystem::path& path, typename Store::Token)
-        : store{store}
-        , infoItem{infoItem}
-        , path{path}
-        , stream{path, std::ios_base::out | std::ios_base::binary} {
-
-        if (stream.bad()) {
-            throw std::runtime_error(fmt::format("Unable to write to file {}", path));
-        }
-    }
-
-    ~StoreWriter() {
-        try {
-            stream.close();
-            infoItem.second = extractInfo(path);
-            {
-                std::scoped_lock lock{store.smtx};
-                infoItem.first = InfoState::Valid;
-            }
-        } catch (const std::exception& e) {
-            store.log->error("Unable to close writer of: {} due to: {}", path, e.what());
-        }
-    }
+                const std::filesystem::path& path, typename Store::Token);
+    ~StoreWriter();
 
     std::ofstream& getStream() { return stream; }
 

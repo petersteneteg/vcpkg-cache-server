@@ -168,4 +168,29 @@ Info extractInfo(const std::filesystem::path& path) {
             .size = std::filesystem::file_size(path)};
 }
 
+StoreWriter::StoreWriter(Store& store, std::pair<InfoState, Info>& infoItem,
+                         const std::filesystem::path& path, typename Store::Token)
+    : store{store}
+    , infoItem{infoItem}
+    , path{path}
+    , stream{path, std::ios_base::out | std::ios_base::binary} {
+
+    if (stream.bad()) {
+        throw std::runtime_error(fmt::format("Unable to write to file {}", path));
+    }
+}
+
+StoreWriter::~StoreWriter() {
+    try {
+        stream.close();
+        infoItem.second = extractInfo(path);
+        {
+            std::scoped_lock lock{store.smtx};
+            infoItem.first = InfoState::Valid;
+        }
+    } catch (const std::exception& e) {
+        store.log->error("Unable to close writer of: {} due to: {}", path, e.what());
+    }
+}
+
 }  // namespace vcache
