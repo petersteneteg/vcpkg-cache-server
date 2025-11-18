@@ -99,21 +99,22 @@ httplib::Server::HandlerWithContentReader authorizeRequest(
 
 std::shared_ptr<spdlog::logger> createLog(spdlog::level::level_enum logLevel,
                                           const std::optional<std::filesystem::path>& logFile) {
-    if (logFile) {
-        auto consoleSink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
-        consoleSink->set_level(logLevel);
-        auto fileSink =
-            std::make_shared<spdlog::sinks::basic_file_sink_mt>(logFile->generic_string(), false);
-        fileSink->set_level(spdlog::level::trace);
-        auto log =
-            std::make_shared<spdlog::logger>("log", spdlog::sinks_init_list{consoleSink, fileSink});
-        log->set_level(spdlog::level::trace);
-        return log;
-    } else {
-        auto log = spdlog::stdout_color_mt("log");
-        log->set_level(logLevel);
-        return log;
-    }
+    auto log = [&]() {
+        if (logFile) {
+            auto consoleSink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
+            auto fileSink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(
+                logFile->generic_string(), false);
+            return std::make_shared<spdlog::logger>("log",
+                                                    spdlog::sinks_init_list{consoleSink, fileSink});
+        } else {
+            return spdlog::stdout_color_mt("log");
+        }
+    }();
+
+    log->set_level(logLevel);
+    log->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%P/%t] %8l: %v");
+    log->info("logLevel is set to {}", to_string_view(logLevel));
+    return log;
 }
 
 std::unique_ptr<httplib::Server> createServer(
@@ -506,6 +507,9 @@ int main(int argc, char* argv[]) {
             res.set_content(fmt::format("<h1>Error 500</h1><p>{}</p>", error), "text/html");
             res.status = httplib::StatusCode::InternalServerError_500;
         });
+    server->set_error_logger([&](const httplib::Error& error, const httplib::Request*) {
+        log->error("Error happened: {}", to_string(error));
+    });
 
     log->info("Start server {}:{}", settings.host, settings.port);
     try {

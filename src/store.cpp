@@ -124,7 +124,7 @@ fp::UnorderedStringMap<std::pair<InfoState, Info>> scan(const std::filesystem::p
         std::filesystem::recursive_directory_iterator(path) | std::views::filter(fp::isZipFile) |
         fp::tryTransform(
             [&](const auto& entry) {
-                log->debug("scan: {}", entry.path().stem().generic_string());
+                log->trace("scan: {}", entry.path().stem().generic_string());
                 return extractInfo(entry.path());
             },
             [&](const auto& entry) {
