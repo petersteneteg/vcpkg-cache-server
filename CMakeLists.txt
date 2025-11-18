@@ -41,6 +41,9 @@ if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
 endif()
 
 if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "AppleClang")
+    find_library(CFNETWORK_FRAMEWORK CFNetwork)
+    target_link_libraries(vcpkg-cache-server PRIVATE ${CFNETWORK_FRAMEWORK})
+
     target_compile_options(vcpkg-cache-server PUBLIC -fexperimental-library)
 endif()
 

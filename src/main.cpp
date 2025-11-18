@@ -44,7 +44,7 @@ auto logger(std::shared_ptr<spdlog::logger> log) {
         for (const auto& [key, val] : req.headers) {
             log->trace("{:>20}: {}", key, val);
         }
-        for (const auto& [name, file] : req.files) {
+        for (const auto& [name, file] : req.form.files) {
             log->trace("{:>20}: {}", "name", name);
             log->trace("{:>20}: {}", "filename", file.filename);
             log->trace("{:>20}: {}", "content type", file.content_type);
@@ -316,13 +316,18 @@ int main(int argc, char* argv[]) {
     }
 
     std::jthread maintenance{[log, &settings, &db, &store](std::stop_token token) {
-        while (!token.stop_requested()) {
-            maintain(store, db, settings.maintenance, log, Clock::now());
-
+        try {
             std::mutex mutex;
-            std::unique_lock lock(mutex);
-            std::condition_variable_any().wait_for(lock, token, std::chrono::hours{1},
-                                                   [] { return false; });
+            while (!token.stop_requested()) {
+                maintain(store, db, settings.maintenance, log, Clock::now());
+                std::unique_lock lock(mutex);
+                std::condition_variable_any().wait_for(lock, token, std::chrono::hours{1},
+                                                       [] { return false; });
+            }
+        } catch (const std::exception& e) {
+            log->error("maintenance failed with error {}", e.what());
+        } catch (...) {
+            log->error("maintenance failed unknown error");
         }
     }};
 
@@ -437,8 +442,8 @@ int main(int argc, char* argv[]) {
         res.set_content(site::match(), "text/html");
     });
     server->Post("/match", [&](const httplib::Request& req, httplib::Response& res) {
-        const auto abi = req.get_file_value("abi_file").content;
-        const auto package = req.get_file_value("package").content;
+        const auto abi = req.form.get_file("abi_file").content;
+        const auto package = req.form.get_file("package").content;
         res.set_content(site::match(abi, package, store), "text/html");
     });
     server->Get("/compare/:sha", [&](const httplib::Request& req, httplib::Response& res) {
@@ -503,5 +508,14 @@ int main(int argc, char* argv[]) {
         });
 
     log->info("Start server {}:{}", settings.host, settings.port);
-    server->listen(settings.host, settings.port);
+    try {
+        if (!server->listen(settings.host, settings.port)) {
+            log->error("Server stop unexpectedly");
+        }
+    } catch (const std::exception& e) {
+        log->error("Server failed with error {}", e.what());
+    } catch (...) {
+        log->error("Server failed unknown error");
+    }
+    log->info("Server shutdown");
 }

@@ -13,6 +13,12 @@ namespace vcache {
 
 Store::Store(const std::filesystem::path& aRoot, std::shared_ptr<spdlog::logger> aLog)
     : log{aLog}, root{aRoot}, infos{} {
+
+    if (!std::filesystem::exists(aRoot)) {
+        log->info("creating cache directory {}", aRoot);
+        std::filesystem::create_directories(aRoot);
+    }
+    
     log->info("Start scan");
     infos = scan(root, log);
     log->info("Scan finished");

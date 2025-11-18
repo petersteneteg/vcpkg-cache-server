@@ -6,11 +6,8 @@
   "vcpkg-configuration": {
     "default-registry": {
       "kind": "builtin",
-      "baseline": "acd65983f2e668c0bc44a117575e6073681fa8e3"
-    },
-    "overlay-ports": [
-      "./vcpkg"
-    ]
+      "baseline": "dfb72f61c5a066ab75cd0bdcb2e007228bfc3270"
+    }
   },
   "dependencies": [
     { "name": "cpp-httplib", "features": ["brotli", "openssl", "zlib"] },
