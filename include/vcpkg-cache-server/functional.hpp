@@ -333,7 +333,7 @@ struct convert<std::chrono::duration<Rep, Period>> {
             }();
             const auto tstr = vcache::fp::trim(str);
             size_t count{0};
-            if (std::from_chars(tstr.begin(), tstr.end(), count).ec != std::errc{}) {
+            if (std::from_chars(tstr.data(), tstr.data() + tstr.size(), count).ec != std::errc{}) {
                 return false;
             }
             res += count * factor;
