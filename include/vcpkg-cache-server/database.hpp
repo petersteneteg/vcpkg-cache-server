@@ -10,6 +10,7 @@
 #include <fmt/chrono.h>
 
 // This is missing in clang?!?
+#if !defined(_MSC_VER)
 inline std::ostream& operator<<(std::ostream& dest, __int128_t value) {
     std::ostream::sentry s(dest);
     if (s) {
@@ -32,6 +33,7 @@ inline std::ostream& operator<<(std::ostream& dest, __int128_t value) {
     }
     return dest;
 }
+#endif
 
 #include <sqlite_orm/sqlite_orm.h>
 
