@@ -9,7 +9,7 @@
 namespace vcache {
 
 void parseConfig(const std::filesystem::path& configFile, Settings& settings) {
-    YAML::Node config = YAML::LoadFile(configFile);
+    YAML::Node config = YAML::LoadFile(configFile.generic_string());
 
     if (config["cache_dir"]) {
         settings.cacheDir = std::filesystem::path{config["cache_dir"].as<std::string>()};

@@ -252,7 +252,7 @@ struct convert<vcache::ByteSize> {
 
         const auto tstr = vcache::fp::trim(str);
         size_t size{0};
-        if (std::from_chars(tstr.begin(), tstr.end(), size).ec != std::errc{}) {
+        if (std::from_chars(tstr.data(), tstr.data() + tstr.size(), size).ec != std::errc{}) {
             return false;
         }
         byteSize = vcache::ByteSize{size * factor};
