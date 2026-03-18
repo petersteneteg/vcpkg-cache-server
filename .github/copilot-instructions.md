@@ -68,7 +68,7 @@ vcpkg-cache-server/
 
 ### Prerequisites
 - CMake 3.26+
-- A C++23-capable compiler (GCC 14+, Clang 18+, MSVC 2022+)
+- A C++23-capable compiler (GCC 13+, Clang 18+, or MSVC 2022 17.x+)
 - vcpkg installed and accessible
 - Ninja build system (for Linux preset)
 
@@ -126,7 +126,7 @@ cmake --build build
 ### Static Analysis (clang-tidy)
 - Extensive checks enabled: bugprone, cppcoreguidelines, google, llvm, misc, modernize, performance, portability, readability
 - Notable disabled checks: `modernize-use-nodiscard`, `modernize-use-trailing-return-type`, `readability-magic-numbers`, `readability-identifier-length`
-- Run: `clang-tidy src/*.cpp -- -std=c++23 -Iinclude $(pkg-config-flags)`
+- Run: `clang-tidy src/*.cpp -- -std=c++23 -Iinclude` (requires a compilation database; generate one with `cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=ON`)
 
 ### Code Conventions
 - All project code is in the `vcache` namespace
