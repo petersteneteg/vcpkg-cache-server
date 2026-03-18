@@ -1,6 +1,3 @@
 #include <vcpkg-cache-server/database.hpp>
 
-
-namespace vcache::db {
-
-}
+namespace vcache::db {}

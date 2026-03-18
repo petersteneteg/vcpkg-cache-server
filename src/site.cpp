@@ -20,14 +20,6 @@ namespace vcache {
 
 namespace html {
 
-constexpr const char bootstrap[] = {
-#embed <bootstrap.min.css>
-};
-
-constexpr const char htmxjs[] = {
-#embed <htmx.min.js>
-};
-
 constexpr std::string_view pre = R"(
 <html>
   <head>
@@ -152,9 +144,7 @@ namespace {
 
 size_t missmatches(const auto& map1, const auto& map2) {
     auto keys = map1 | std::views::keys | std::ranges::to<std::set>();
-
-    const auto keys2 = map2 | std::views::keys;
-    keys.insert(keys2.begin(), keys2.end());
+    keys.insert_range(map2 | std::views::keys);
 
     return std::transform_reduce(
         std::begin(keys), std::end(keys), size_t{0}, std::plus<>{}, [&](const auto& key) {
@@ -169,8 +159,7 @@ size_t missmatches(const auto& map1, const auto& map2) {
 
 std::string formatDiff(const auto& dstMap, const auto& srcMap) {
     auto keys = dstMap | std::views::keys | std::ranges::to<std::set>();
-    const auto srcKeys = srcMap | std::views::keys;
-    keys.insert(srcKeys.begin(), srcKeys.end());
+    keys.insert_range(srcMap | std::views::keys);
 
     std::string buff;
     fmt::format_to(std::back_inserter(buff), "<dl>");
@@ -369,8 +358,8 @@ std::string link(std::string_view url, std::string_view content) {
 std::string downloadsLink(Params params) {
     Url purl{.path = "/downloads", .params = {{"mode", "plain"}}};
     Url furl{.path = "/downloads", .params = {{"mode", "full"}}};
-    purl.params.insert(params.begin(), params.end());
-    furl.params.insert(params.begin(), params.end());
+    purl.params.insert_range(params);
+    furl.params.insert_range(params);
 
     constexpr std::string_view str = R"(
         <div class="d-inline-block float-end fs-4">
@@ -937,13 +926,22 @@ std::string favicon() { return std::string{html::favicon}; }
 std::string maskicon() { return std::string{html::maskicon}; }
 
 std::optional<std::pair<std::string, std::string>> script(std::string_view name) {
+    // clang-format off
+    static constexpr const char bootstrapcss[] = {
+#embed <bootstrap.min.css>
+    };
+
+    static constexpr const char htmxjs[] = {
+#embed <htmx.min.js>
+    };
+    // clang-format on
+
     if (name == "htmx.js") {
-        return std::optional<std::pair<std::string, std::string>>{std::in_place, "text/js",
-                                                                  html::htmxjs};
+        return std::optional<std::pair<std::string, std::string>>{std::in_place, "text/js", htmxjs};
     }
     if (name == "bootstrap.css") {
         return std::optional<std::pair<std::string, std::string>>{std::in_place, "text/css",
-                                                                  html::bootstrap};
+                                                                  bootstrapcss};
     }
 
     return std::nullopt;

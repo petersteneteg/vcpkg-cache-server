@@ -18,7 +18,7 @@ Store::Store(const std::filesystem::path& aRoot, std::shared_ptr<spdlog::logger>
         log->info("creating cache directory {}", aRoot);
         std::filesystem::create_directories(aRoot);
     }
-    
+
     log->info("Start scan");
     infos = scan(root, log);
     log->info("Scan finished");
@@ -123,7 +123,7 @@ fp::UnorderedStringMap<std::pair<InfoState, Info>> scan(const std::filesystem::p
     return std::filesystem::recursive_directory_iterator(path) | std::views::filter(fp::isZipFile) |
            fp::tryTransform(
                [&](const auto& entry) {
-                log->trace("scan: {}", entry.path().stem().generic_string());
+                   log->trace("scan: {}", entry.path().stem().generic_string());
                    return extractInfo(entry.path());
                },
                [&](const auto& entry) {
