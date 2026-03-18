@@ -33,26 +33,40 @@
 
 namespace vcache {
 
+void logRequest(std::shared_ptr<spdlog::logger> log, spdlog::level::level_enum lvl,
+                const httplib::Request& req) {
+
+    log->log(lvl, "{:>20}: {}", "method", req.method);
+    log->log(lvl, "{:>20}: {}", "path", req.path);
+    log->log(lvl, "{:>20}: {}", "matched_route", req.matched_route);
+    log->log(lvl, "{:>20}: {}", "remote_addr", req.remote_addr);
+    log->log(lvl, "{:>20}: {}", "local_addr", req.local_addr);
+
+    for (const auto& [key, val] : req.params) {
+        log->log(lvl, "{:>20}: {}", key, val);
+    }
+    for (const auto& [key, val] : req.headers) {
+        log->log(lvl, "{:>20}: {}", key, val);
+    }
+    for (const auto& [key, val] : req.trailers) {
+        log->log(lvl, "{:>20}: {}", key, val);
+    }
+    for (const auto& [key, val] : req.path_params) {
+        log->log(lvl, "{:>20}: {}", key, val);
+    }
+    for (const auto& [name, file] : req.form.files) {
+        log->log(lvl, "{:>20}: {}", "name", name);
+        log->log(lvl, "{:>20}: {}", "filename", file.filename);
+        log->log(lvl, "{:>20}: {}", "content type", file.content_type);
+        log->log(lvl, "{:>20}: {}", "text length", file.content.size());
+    }
+}
+
 auto logger(std::shared_ptr<spdlog::logger> log) {
     return [log](const httplib::Request& req, const httplib::Response& res) {
-        log->debug("{:5} {:15} Status: {:4} Vers: {:8} Path: {}", req.method,
-                   fp::mGet(req.headers, "REMOTE_ADDR").value_or("?.?.?.?"), res.status,
-                   req.version, req.path);
-        for (const auto& [key, val] : req.params) {
-            log->trace("{:>20}: {}", key, val);
-        }
-        for (const auto& [key, val] : req.headers) {
-            log->trace("{:>20}: {}", key, val);
-        }
-        for (const auto& [name, file] : req.form.files) {
-            log->trace("{:>20}: {}", "name", name);
-            log->trace("{:>20}: {}", "filename", file.filename);
-            log->trace("{:>20}: {}", "content type", file.content_type);
-            log->trace("{:>20}: {}", "text length", file.content.size());
-        }
-        for (const auto& [key, val] : res.headers) {
-            log->trace("{:>20}: {}", key, val);
-        }
+        log->debug("{:5} {:15} Status: {:4} Vers: {:8} Path: {}", req.method, req.remote_addr,
+                   res.status, req.version, req.path);
+        logRequest(log, spdlog::level::trace, req);
     };
 }
 
@@ -501,14 +515,19 @@ int main(int argc, char* argv[]) {
             "text/html");
     });
     server->set_exception_handler(
-        [&](const httplib::Request&, httplib::Response& res, std::exception_ptr ep) {
+        [&](const httplib::Request& req, httplib::Response& res, std::exception_ptr ep) {
             const auto error = fp::exceptionToString(ep);
             log->error(error);
+            logRequest(log, spdlog::level::err, req);
             res.set_content(fmt::format("<h1>Error 500</h1><p>{}</p>", error), "text/html");
             res.status = httplib::StatusCode::InternalServerError_500;
         });
-    server->set_error_logger([&](const httplib::Error& error, const httplib::Request*) {
+    server->set_error_logger([&](const httplib::Error& error, const httplib::Request* req) {
         log->error("Error happened: {}", to_string(error));
+
+        if (req) {
+            logRequest(log, spdlog::level::err, *req);
+        }
     });
 
     log->info("Start server {}:{}", settings.host, settings.port);

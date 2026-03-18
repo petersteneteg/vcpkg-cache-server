@@ -175,12 +175,6 @@ using is_detected_convertible = std::is_convertible<detected_t<Op, Args...>, To>
 template <class To, template <class...> class Op, class... Args>
 constexpr bool is_detected_convertible_v = is_detected_convertible<To, Op, Args...>::value;
 
-// GCC 14 does not support ranges::to
-template <typename T, typename R>
-auto fromRange(R&& range) {
-    return T(std::begin(range), std::end(range));
-}
-
 }  // namespace fp
 
 enum struct ByteSize : size_t {};
@@ -252,7 +246,7 @@ struct convert<vcache::ByteSize> {
 
         const auto tstr = vcache::fp::trim(str);
         size_t size{0};
-        if (std::from_chars(tstr.begin(), tstr.end(), size).ec != std::errc{}) {
+        if (std::from_chars(tstr.data(), tstr.data() + tstr.size(), size).ec != std::errc{}) {
             return false;
         }
         byteSize = vcache::ByteSize{size * factor};
@@ -333,7 +327,7 @@ struct convert<std::chrono::duration<Rep, Period>> {
             }();
             const auto tstr = vcache::fp::trim(str);
             size_t count{0};
-            if (std::from_chars(tstr.begin(), tstr.end(), count).ec != std::errc{}) {
+            if (std::from_chars(tstr.data(), tstr.data() + tstr.size(), count).ec != std::errc{}) {
                 return false;
             }
             res += count * factor;
@@ -415,7 +409,12 @@ struct fmt::formatter<vcache::Time, char> {
             *it++ = '-';
             return it;
         }
-        return formatter.format(vcache::Clock::to_sys(time), ctx);
+#ifdef _LIBCPP_VERSION
+        const auto sysTime = vcache::Clock::to_sys(time);
+#else
+        const auto sysTime = std::chrono::clock_cast<std::chrono::system_clock>(time);
+#endif
+        return formatter.format(sysTime, ctx);
     }
 };
 

@@ -25,6 +25,12 @@ target_sources(vcpkg-cache-server
         README.md
 )
 
+file(DOWNLOAD https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css
+    ${CMAKE_CURRENT_BINARY_DIR}/resources/bootstrap.min.css
+    EXPECTED_HASH SHA256=d85327d99c7a3ee1f9b5d0500d1370acea3ad2db39c163c2f51f232baedbdede)
+file(DOWNLOAD https://cdn.jsdelivr.net/npm/htmx.org@2.0.8/dist/htmx.min.js
+    ${CMAKE_CURRENT_BINARY_DIR}/resources/htmx.min.js
+    EXPECTED_HASH SHA256=22283ef68cb7545914f0a88a1bdedc7256a703d1d580c1d255217d0a50d31313)
 
 target_include_directories(vcpkg-cache-server PUBLIC "resources")
 target_compile_options(vcpkg-cache-server PUBLIC
@@ -37,6 +43,11 @@ if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
         UNICODE
         _UNICODE
         _USE_MATH_DEFINES
+    )
+else()
+    target_compile_options(vcpkg-cache-server PRIVATE
+        "--embed-dir=${CMAKE_CURRENT_BINARY_DIR}/resources/"
+        -Wno-c23-extensions
     )
 endif()
 
