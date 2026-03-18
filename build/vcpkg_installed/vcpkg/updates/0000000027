@@ -1,8 +1,0 @@
-Package: fast-float
-Version: 8.1.0
-Depends: vcpkg-cmake, vcpkg-cmake-config
-Architecture: x64-linux
-Multi-Arch: same
-Abi: 7d812ba7a0a4409589aa883c3a309bd918de2cd9c36b48df922c2a5eb44ed706
-Description: Fast and exact implementation of the C++ from_chars functions for float and double types: 4x faster than strtod
-Status: install ok installed

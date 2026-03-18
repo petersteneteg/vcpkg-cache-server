@@ -1,8 +1,0 @@
-Package: argparse
-Version: 3.2
-Depends: vcpkg-cmake, vcpkg-cmake-config
-Architecture: x64-linux
-Multi-Arch: same
-Abi: a6d2e023fc9f7b9a38f6e553c04ec4a7569dc0171d8575077f6e204bbbfcdb50
-Description: Argument parser for modern C++
-Status: install ok half-installed
