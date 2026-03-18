@@ -13,6 +13,8 @@
 #include <string>
 #include <numeric>
 #include <tuple>
+#include <memory>
+#include <bit>
 
 #include <rapidfuzz/fuzz.hpp>
 
@@ -927,21 +929,24 @@ std::string maskicon() { return std::string{html::maskicon}; }
 
 std::optional<std::pair<std::string, std::string>> script(std::string_view name) {
     // clang-format off
-    static constexpr const char bootstrapcss[] = {
+    static constexpr unsigned char bootstrapcss[] = {
 #embed <bootstrap.min.css>
     };
 
-    static constexpr const char htmxjs[] = {
+    static constexpr unsigned char htmxjs[] = {
 #embed <htmx.min.js>
     };
     // clang-format on
 
     if (name == "htmx.js") {
-        return std::optional<std::pair<std::string, std::string>>{std::in_place, "text/js", htmxjs};
+        const auto data = std::bit_cast<std::array<char, sizeof(htmxjs)>>(htmxjs);
+        return std::optional<std::pair<std::string, std::string>>{
+            std::in_place, "text/js", std::string{data.data(), data.size()}};
     }
     if (name == "bootstrap.css") {
-        return std::optional<std::pair<std::string, std::string>>{std::in_place, "text/css",
-                                                                  bootstrapcss};
+        const auto data = std::bit_cast<std::array<char, sizeof(bootstrapcss)>>(bootstrapcss);
+        return std::optional<std::pair<std::string, std::string>>{
+            std::in_place, "text/js", std::string{data.data(), data.size()}};
     }
 
     return std::nullopt;
