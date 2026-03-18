@@ -9,8 +9,7 @@ permissions:
   contents: read
 
 env:
-  VCPKG_CACHE_TOKEN: ${{ secrets.VCPKG_CACHE_TOKEN }}
-  VCPKG_BINARY_SOURCES: "default;http,https://scivis-vcpkg-cache.it.liu.se/cache/{sha},readwrite,Authorization: Bearer $env{VCPKG_CACHE_TOKEN}"
+  VCPKG_BINARY_SOURCES: "default;http,https://scivis-vcpkg-cache.it.liu.se/cache/{sha},readwrite,Authorization: Bearer ${{ secrets.VCPKG_CACHE_TOKEN }}"
 
 jobs:
   build:
