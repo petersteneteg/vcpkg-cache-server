@@ -27,6 +27,15 @@ jobs:
             preset: xcode-developer-arm64
 
     steps:
+      - name: Install GCC 15
+        if: runner.os == 'Linux'
+        run: |
+          sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
+          sudo apt-get update
+          sudo apt-get install -y gcc-15 g++-15
+          echo "CC=gcc-15" >> $GITHUB_ENV
+          echo "CXX=g++-15" >> $GITHUB_ENV
+
       - name: "Clone Vcpkg Cache Server"
         uses: actions/checkout@v6
         with:
