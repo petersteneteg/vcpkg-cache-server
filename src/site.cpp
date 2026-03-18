@@ -151,7 +151,7 @@ namespace site {
 namespace {
 
 size_t missmatches(const auto& map1, const auto& map2) {
-    auto keys = fp::fromRange<std::set<std::string>>(map1 | std::views::keys);
+    auto keys = map1 | std::views::keys | std::ranges::to<std::set>();
 
     const auto keys2 = map2 | std::views::keys;
     keys.insert(keys2.begin(), keys2.end());
@@ -168,7 +168,7 @@ size_t missmatches(const auto& map1, const auto& map2) {
 }
 
 std::string formatDiff(const auto& dstMap, const auto& srcMap) {
-    auto keys = fp::fromRange<std::set<std::string>>(dstMap | std::views::keys);
+    auto keys = dstMap | std::views::keys | std::ranges::to<std::set>();
     const auto srcKeys = srcMap | std::views::keys;
     keys.insert(srcKeys.begin(), srcKeys.end());
 
@@ -391,12 +391,11 @@ std::string downloadsLink(Params params) {
 }  // namespace
 
 std::string detail::nav(const std::vector<std::pair<std::string, std::string>>& path) {
-    const auto str = fp::fromRange<std::string>(
-        path | std::views::transform([i = size_t{0}, &path](const auto& item) mutable {
-            ++i;
-            return navItem(item.first, item.second, i == path.size());
-        }) |
-        std::views::join | std::views::common);
+    const auto str = path | std::views::transform([i = size_t{0}, &path](const auto& item) mutable {
+                         ++i;
+                         return navItem(item.first, item.second, i == path.size());
+                     }) |
+                     std::views::join | std::ranges::to<std::string>();
 
     return fmt::format(R"(<nav class="d-inline-block"><ol class="breadcrumb fs-4">{}</ol></nav>)",
                        str);
@@ -447,33 +446,34 @@ decltype(auto) getRowItem() {
 std::string index(const Store& store, db::Database& db, Mode mode, Sort sort,
                   std::optional<Order> maybeOrder, std::string_view search) {
     const auto order = maybeOrder.value_or(Order::Ascending);
-    const auto keys = fp::fromRange<std::set<std::string>>(store.allInfos() |
-                                                           std::views::transform(&Info::package));
+    const auto keys =
+        store.allInfos() | std::views::transform(&Info::package) | std::ranges::to<std::set>();
 
     std::map<std::string, std::vector<const Info*>> packages;
     std::ranges::for_each(store.allInfos(),
                           [&](const Info& info) { packages[info.package].push_back(&info); });
 
     rapidfuzz::fuzz::CachedPartialRatio<char> scorer(search);
-    auto list = fp::fromRange<std::vector<RowItem>>(
-        packages | std::views::transform([&](const auto& package) -> RowItem {
-            auto& [name, items] = package;
-            const auto range =
-                items | std::views::transform([](const auto* item) { return item->size; });
-            const auto diskSize =
-                std::accumulate(std::begin(range), std::end(range), size_t{0}, std::plus<>{});
+    auto list = packages | std::views::transform([&](const auto& package) -> RowItem {
+                    auto& [name, items] = package;
+                    const auto range =
+                        items | std::views::transform([](const auto* item) { return item->size; });
+                    const auto diskSize = std::accumulate(std::begin(range), std::end(range),
+                                                          size_t{0}, std::plus<>{});
 
-            const auto [firstIt, lastIt] = std::ranges::minmax_element(
-                items, std::less<>{}, [](const Info* i) { return i->time; });
-            const auto similarity = search.empty() ? 1.0 : scorer.similarity(name);
+                    const auto [firstIt, lastIt] = std::ranges::minmax_element(
+                        items, std::less<>{}, [](const Info* i) { return i->time; });
+                    const auto similarity = search.empty() ? 1.0 : scorer.similarity(name);
 
-            const auto [downloads, lastUse] = db::getPackageDownloadsAndLastUse(db, name);
+                    const auto [downloads, lastUse] = db::getPackageDownloadsAndLastUse(db, name);
 
-            return {name,    items.size(),     diskSize,        downloads,
-                    lastUse, (*firstIt)->time, (*lastIt)->time, similarity};
-        }) |
-        std::views::filter(
-            [&](const RowItem& item) { return search.empty() ? true : item.similarity > 55.0; }));
+                    return {name,    items.size(),     diskSize,        downloads,
+                            lastUse, (*firstIt)->time, (*lastIt)->time, similarity};
+                }) |
+                std::views::filter([&](const RowItem& item) {
+                    return search.empty() ? true : item.similarity > 55.0;
+                }) |
+                std::ranges::to<std::vector>();
 
     constexpr auto table = []<size_t... Is>(std::integer_sequence<size_t, Is...>) {
         return std::array{+[](decltype(list)& list, Order order) {
@@ -513,12 +513,12 @@ std::string index(const Store& store, db::Database& db, Mode mode, Sort sort,
         </div>
     )";
 
-    const auto str = fp::fromRange<std::string>(
+    const auto str =
         list | std::views::transform([&](const RowItem& item) {
             return fmt::format(itemStr, item.name, item.count, ByteSize{item.diskSize},
                                item.downloads, item.lastUse, item.firstTime, item.lastTime);
         }) |
-        std::views::join | std::views::common);
+        std::views::join | std::ranges::to<std::string>();
 
     const auto totalSize = std::ranges::fold_left(
         list | std::views::transform([&](const RowItem& item) { return item.diskSize; }), size_t{0},
@@ -585,21 +585,20 @@ std::string match() {
 }
 
 std::string match(std::string_view abi, std::string_view package, const Store& store) {
-    const auto abiMap =
-        fp::fromRange<std::map<std::string, std::string>>(abi | fp::splitIntoPairs('\n', ' '));
+    const auto abiMap = abi | fp::splitIntoPairs('\n', ' ') | std::ranges::to<std::map>();
 
-    auto matches = fp::fromRange<std::vector<Info>>(
-        store.allInfos() |
-        std::views::filter([&](const auto& info) { return info.package == package; }));
+    auto matches = store.allInfos() |
+                   std::views::filter([&](const auto& info) { return info.package == package; }) |
+                   std::views::transform([&](const auto& info) { return info; }) |
+                   std::ranges::to<std::vector>();
     std::ranges::sort(matches, std::less<>{},
                       [&](const auto& info) { return missmatches(info.abi, abiMap); });
 
-    const auto str = fp::fromRange<std::string>(
-        matches | std::views::take(3) | std::views::transform([&](const auto& info) {
-            return fmt::format("<div><h3>Time: {:%Y-%m-%d %H:%M:%S} {}</h3>{}</div>", info.time,
-                               info.sha, formatDiff(abiMap, info.abi));
-        }) |
-        std::views::join | std::views::common);
+    const auto str = matches | std::views::take(3) | std::views::transform([&](const auto& info) {
+                         return fmt::format("<div><h3>Time: {:%Y-%m-%d %H:%M:%S} {}</h3>{}</div>",
+                                            info.time, info.sha, formatDiff(abiMap, info.abi));
+                     }) |
+                     std::views::join | std::ranges::to<std::string>();
 
     return fmt::format(R"(<h1>Target ABI:</h1><div>{}</div><div>{}</div>)", formatMap(abiMap), str);
 }
@@ -614,18 +613,19 @@ std::string compare(std::string_view sha, const Store& store, Mode mode) {
     const auto& abiMap = targetInfo->abi;
     const auto& package = targetInfo->package;
 
-    auto matches = fp::fromRange<std::vector<Info>>(
-        store.allInfos() | std::views::filter([&](const auto& info) { return info.sha != sha; }) |
-        std::views::filter([&](const auto& info) { return info.package == package; }));
+    auto matches = store.allInfos() |
+                   std::views::filter([&](const auto& info) { return info.sha != sha; }) |
+                   std::views::filter([&](const auto& info) { return info.package == package; }) |
+                   std::views::transform([&](const auto& info) { return info; }) |
+                   std::ranges::to<std::vector>();
     std::ranges::sort(matches, std::less<>{},
                       [&](const auto& info) { return missmatches(info.abi, abiMap); });
 
-    const auto str = fp::fromRange<std::string>(
-        matches | std::views::take(5) | std::views::transform([&](const auto& info) {
-            return fmt::format("<div><h3>Time: {:%Y-%m-%d %H:%M:%S} {}</h3>{}</div>", info.time,
-                               info.sha, formatDiff(abiMap, info.abi));
-        }) |
-        std::views::join | std::views::common);
+    const auto str = matches | std::views::take(5) | std::views::transform([&](const auto& info) {
+                         return fmt::format("<div><h3>Time: {:%Y-%m-%d %H:%M:%S} {}</h3>{}</div>",
+                                            info.time, info.sha, formatDiff(abiMap, info.abi));
+                     }) |
+                     std::views::join | std::ranges::to<std::string>();
 
     const auto nav =
         detail::nav({{"Packages", "/"},
@@ -672,22 +672,21 @@ std::string find(std::string_view package, const Store& store, db::Database& db,
                  Sort sort, std::optional<Order> maybeOrder) {
     const auto order = maybeOrder.value_or(Order::Ascending);
 
-    auto list = fp::fromRange<std::vector<CacheItem>>(
-        store.allInfos() |
-        std::views::filter([&](const auto& info) { return info.package == package; }) |
-        std::views::transform([&](const auto& info) -> CacheItem {
-            const auto [downloads, lastUse] = db::getCacheDownloadsAndLastUse(db, info.sha);
-            return {.version = info.version,
-                    .arch = info.arch,
-                    .diskSize = info.size,
-                    .downloads = downloads,
-                    .lastUse = lastUse,
-                    .created = info.time,
-                    .sha = info.sha};
-        }));
+    auto list = store.allInfos() |
+                std::views::filter([&](const auto& info) { return info.package == package; }) |
+                std::views::transform([&](const auto& info) -> CacheItem {
+                    const auto [downloads, lastUse] = db::getCacheDownloadsAndLastUse(db, info.sha);
+                    return {.version = info.version,
+                            .arch = info.arch,
+                            .diskSize = info.size,
+                            .downloads = downloads,
+                            .lastUse = lastUse,
+                            .created = info.time,
+                            .sha = info.sha};
+                }) |
+                std::ranges::to<std::vector>();
 
-    const auto archs =
-        fp::fromRange<std::set<std::string>>(list | std::views::transform(&CacheItem::arch));
+    const auto archs = list | std::views::transform(&CacheItem::arch) | std::ranges::to<std::set>();
     // Todo make selectable
 
     constexpr auto table = []<size_t... Is>(std::integer_sequence<size_t, Is...>) {
@@ -754,18 +753,17 @@ std::string find(std::string_view package, const Store& store, db::Database& db,
         </div>
     )";
 
-    const auto str = fp::fromRange<std::string>(
-        list | std::views::transform([&](const CacheItem& item) {
-            return fmt::format(itemStr, item.version, item.arch, ByteSize{item.diskSize},
-                               item.downloads, item.lastUse, item.created, item.sha,
-                               item.sha.substr(0, 15));
-        }) |
-        std::views::join | std::views::common);
+    const auto str = list | std::views::transform([&](const CacheItem& item) {
+                         return fmt::format(itemStr, item.version, item.arch,
+                                            ByteSize{item.diskSize}, item.downloads, item.lastUse,
+                                            item.created, item.sha, item.sha.substr(0, 15));
+                     }) |
+                     std::views::join | std::ranges::to<std::string>();
 
-    const auto sizes = fp::fromRange<std::vector<size_t>>(
+    const auto sizes =
         store.allInfos() |
         std::views::filter([&](const auto& info) { return info.package == package; }) |
-        std::views::transform(&Info::size));
+        std::views::transform(&Info::size) | std::ranges::to<std::vector>();
 
     const auto count = sizes.size();
     const auto diskSize = std::accumulate(sizes.begin(), sizes.end(), size_t{0}, std::plus<>());
@@ -886,7 +884,7 @@ std::string downloads(db::Database& db, Mode mode, std::optional<size_t> sortIdx
     }
     (std::make_integer_sequence<size_t, cols.count>());
     const auto headerRow = fmt::format(R"(<div class="row">{}</div>)",
-                                       fp::fromRange<std::string>(header | std::views::join));
+                                       header | std::views::join | std::ranges::to<std::string>());
 
     static constexpr std::string_view itemStr = R"(
         <div class="row" {8}>
@@ -911,7 +909,7 @@ std::string downloads(db::Database& db, Mode mode, std::optional<size_t> sortIdx
     const auto trigger =
         fmt::format(R"( hx-get="{}" hx-trigger="revealed" hx-swap="afterend")", turl);
 
-    const auto str = fp::fromRange<std::string>(
+    const auto str =
         std::views::zip(std::views::iota(size_t{1}), data) |
         std::views::transform([&](auto&& countAndItem) {
             auto&& [count, item] = countAndItem;
@@ -922,7 +920,7 @@ std::string downloads(db::Database& db, Mode mode, std::optional<size_t> sortIdx
                                link(fmt::format("/package/{}", sha), sha.substr(0, 10)),
                                (count == data.size() ? trigger : std::string{}));
         }) |
-        std::views::join | std::views::common);
+        std::views::join | std::ranges::to<std::string>();
 
     if (mode == Mode::Append) {
         return str;

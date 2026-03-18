@@ -95,7 +95,7 @@ std::string Store::statistics() const {
     const auto diskSize = std::ranges::fold_left(allInfos() | std::views::transform(&Info::size),
                                                  size_t{0}, std::plus<>{});
     const auto packages =
-        fp::fromRange<std::set<std::string>>(allInfos() | std::views::transform(&Info::package));
+        allInfos() | std::views::transform(&Info::package) | std::ranges::to<std::set>();
 
     return fmt::format("Found {} caches of {} packages. Using {}", infos.size(), packages.size(),
                        ByteSize{diskSize});
@@ -120,22 +120,22 @@ void Store::remove(std::string_view sha) {
 
 fp::UnorderedStringMap<std::pair<InfoState, Info>> scan(const std::filesystem::path& path,
                                                         std::shared_ptr<spdlog::logger> log) {
-    return fp::fromRange<fp::UnorderedStringMap<std::pair<InfoState, Info>>>(
-        std::filesystem::recursive_directory_iterator(path) | std::views::filter(fp::isZipFile) |
-        fp::tryTransform(
-            [&](const auto& entry) {
+    return std::filesystem::recursive_directory_iterator(path) | std::views::filter(fp::isZipFile) |
+           fp::tryTransform(
+               [&](const auto& entry) {
                 log->trace("scan: {}", entry.path().stem().generic_string());
-                return extractInfo(entry.path());
-            },
-            [&](const auto& entry) {
-                log->error("error scaning {} : {}, removing entry", entry.path(),
-                           fp::exceptionToString());
-                std::filesystem::remove(entry.path());
-            }) |
-        std::views::transform([&](auto&& info) {
-            return std::pair<const std::string, std::pair<InfoState, Info>>{
-                info.sha, {InfoState::Valid, info}};
-        }));
+                   return extractInfo(entry.path());
+               },
+               [&](const auto& entry) {
+                   log->error("error scaning {} : {}, removing entry", entry.path(),
+                              fp::exceptionToString());
+                   std::filesystem::remove(entry.path());
+               }) |
+           std::views::transform([&](auto&& info) {
+               return std::pair<const std::string, std::pair<InfoState, Info>>{
+                   info.sha, {InfoState::Valid, info}};
+           }) |
+           std::ranges::to<fp::UnorderedStringMap<std::pair<InfoState, Info>>>();
 }
 
 Info extractInfo(const std::filesystem::path& path) {
@@ -148,8 +148,7 @@ Info extractInfo(const std::filesystem::path& path) {
     if (ctrl.isNull()) {
         throw std::runtime_error{"missing CONTROL file"};
     }
-    auto ctrlMap = fp::fromRange<std::map<std::string, std::string>>(ctrl.readAsText() |
-                                                                     fp::splitIntoPairs('\n', ':'));
+    auto ctrlMap = ctrl.readAsText() | fp::splitIntoPairs('\n', ':') | std::ranges::to<std::map>();
 
     auto abi = zf.getEntry(
         fmt::format("share/{}/vcpkg_abi_info.txt", fp::mGet(ctrlMap, "Package").value_or("?")));
@@ -163,8 +162,7 @@ Info extractInfo(const std::filesystem::path& path) {
             throw std::runtime_error{"missing vcpkg_abi_info.txt file"};
         }
     }
-    auto abiMap = fp::fromRange<std::map<std::string, std::string>>(abi.readAsText() |
-                                                                    fp::splitIntoPairs('\n', ' '));
+    auto abiMap = abi.readAsText() | fp::splitIntoPairs('\n', ' ') | std::ranges::to<std::map>();
 
     return {.package = fp::mGet(ctrlMap, "Package").value_or("?"),
             .version = fp::mGet(ctrlMap, "Version").value_or("?"),
