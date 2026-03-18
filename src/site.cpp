@@ -3,9 +3,6 @@
 #include <vcpkg-cache-server/functional.hpp>
 #include <vcpkg-cache-server/database.hpp>
 
-#include <vcpkg-cache-server/resources/htmx.js.hpp>
-#include <vcpkg-cache-server/resources/bootstrap.css.hpp>
-
 #include <fmt/format.h>
 #include <fmt/std.h>
 #include <fmt/chrono.h>
@@ -22,6 +19,15 @@
 namespace vcache {
 
 namespace html {
+
+constexpr const char bootstrap[] = {
+#embed <bootstrap.min.css>
+};
+
+constexpr const char htmxjs[] = {
+#embed <htmx.min.js>
+};
+
 constexpr std::string_view pre = R"(
 <html>
   <head>

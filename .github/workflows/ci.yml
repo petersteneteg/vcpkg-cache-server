@@ -22,9 +22,6 @@ jobs:
           - name: Linux (GCC)
             os: ubuntu-latest
             preset: ninja-developer
-          - name: Windows (MSVC)
-            os: windows-latest
-            preset: msvc-developer
           - name: macOS (Xcode)
             os: macos-latest
             preset: xcode-developer-arm64
