@@ -415,7 +415,12 @@ struct fmt::formatter<vcache::Time, char> {
             *it++ = '-';
             return it;
         }
-        return formatter.format(vcache::Clock::to_sys(time), ctx);
+#ifdef _LIBCPP_VERSION
+        const auto sysTime = vcache::Clock::to_sys(time);
+#else
+        const auto sysTime = std::chrono::clock_cast<std::chrono::system_clock>(time);
+#endif
+        return formatter.format(sysTime, ctx);
     }
 };
 
