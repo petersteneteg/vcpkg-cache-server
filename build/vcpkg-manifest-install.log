@@ -1,0 +1,359 @@
+A suitable version of cmake was not found (required v3.31.10).
+Downloading https://github.com/Kitware/CMake/releases/download/v3.31.10/cmake-3.31.10-linux-x86_64.tar.gz -> cmake-3.31.10-linux-x86_64.tar.gz
+Successfully downloaded cmake-3.31.10-linux-x86_64.tar.gz
+Extracting cmake...
+Detecting compiler hash for triplet x64-linux...
+Compiler found: /usr/bin/c++
+The following packages will be built and installed:
+    argparse:x64-linux@3.2
+  * brotli:x64-linux@1.2.0
+  * bzip2[core,tool]:x64-linux@1.0.8#6
+    catch2:x64-linux@3.11.0
+    cpp-httplib[brotli,core,openssl,zlib]:x64-linux@0.27.0
+    fast-float:x64-linux@8.1.0
+    fmt:x64-linux@12.1.0
+  * libzip[bzip2,core,default-aes,openssl]:x64-linux@1.11.4
+    libzippp:x64-linux@7.1-1.10.1
+    openssl[core,tools]:x64-linux@3.6.0#3
+    rapidfuzz:x64-linux@3.3.3
+    spdlog:x64-linux@1.16.0
+    sqlite-orm:x64-linux@1.9.1
+  * sqlite3[core,json1]:x64-linux@3.51.0
+  * vcpkg-cmake:x64-linux@2024-04-23
+  * vcpkg-cmake-config:x64-linux@2024-05-23
+  * vcpkg-cmake-get-vars:x64-linux@2025-05-29
+    yaml-cpp:x64-linux@0.8.0#3
+  * zlib:x64-linux@1.3.1
+Additional packages (*) will be modified to complete this operation.
+Restored 0 package(s) from /home/runner/.cache/vcpkg/archives in 41.5 us. Use --debug to see more details.
+Installing 1/19 vcpkg-cmake-config:x64-linux@2024-05-23...
+vcpkg-cmake-config:x64-linux@2024-05-23 package ABI: 938b5e1dc7ceacf08654bef246055524d658786b56f39c96f3b23d2de8d063d3
+Building vcpkg-cmake-config:x64-linux@2024-05-23...
+-- Installing: /usr/local/share/vcpkg/packages/vcpkg-cmake-config_x64-linux/share/vcpkg-cmake-config/vcpkg_cmake_config_fixup.cmake
+-- Installing: /usr/local/share/vcpkg/packages/vcpkg-cmake-config_x64-linux/share/vcpkg-cmake-config/vcpkg-port-config.cmake
+-- Installing: /usr/local/share/vcpkg/packages/vcpkg-cmake-config_x64-linux/share/vcpkg-cmake-config/copyright
+-- Skipping post-build validation due to VCPKG_POLICY_EMPTY_PACKAGE
+Starting submission of vcpkg-cmake-config:x64-linux@2024-05-23 to 1 binary cache(s) in the background
+Elapsed time to handle vcpkg-cmake-config:x64-linux: 43.6 ms
+Installing 2/19 vcpkg-cmake:x64-linux@2024-04-23...
+vcpkg-cmake:x64-linux@2024-04-23 package ABI: f7cbaf4a1eecbbb1579be1e8dbbd016626910498335b8370236a4219615937b6
+Building vcpkg-cmake:x64-linux@2024-04-23...
+-- Installing: /usr/local/share/vcpkg/packages/vcpkg-cmake_x64-linux/share/vcpkg-cmake/vcpkg_cmake_configure.cmake
+-- Installing: /usr/local/share/vcpkg/packages/vcpkg-cmake_x64-linux/share/vcpkg-cmake/vcpkg_cmake_build.cmake
+-- Installing: /usr/local/share/vcpkg/packages/vcpkg-cmake_x64-linux/share/vcpkg-cmake/vcpkg_cmake_install.cmake
+-- Installing: /usr/local/share/vcpkg/packages/vcpkg-cmake_x64-linux/share/vcpkg-cmake/vcpkg-port-config.cmake
+-- Installing: /usr/local/share/vcpkg/packages/vcpkg-cmake_x64-linux/share/vcpkg-cmake/copyright
+-- Performing post-build validation
+Starting submission of vcpkg-cmake:x64-linux@2024-04-23 to 1 binary cache(s) in the background
+Elapsed time to handle vcpkg-cmake:x64-linux: 22 ms
+Completed submission of vcpkg-cmake-config:x64-linux@2024-05-23 to 1 binary cache(s) in 6.67 ms
+Installing 3/19 argparse:x64-linux@3.2...
+argparse:x64-linux@3.2 package ABI: a6d2e023fc9f7b9a38f6e553c04ec4a7569dc0171d8575077f6e204bbbfcdb50
+Building argparse:x64-linux@3.2...
+Downloading https://github.com/p-ranav/argparse/archive/v3.2.tar.gz -> p-ranav-argparse-v3.2.tar.gz
+Successfully downloaded p-ranav-argparse-v3.2.tar.gz
+-- Extracting source /usr/local/share/vcpkg/downloads/p-ranav-argparse-v3.2.tar.gz
+-- Using source at /usr/local/share/vcpkg/buildtrees/argparse/src/v3.2-87769c9dd0.clean
+-- Configuring x64-linux
+-- Building x64-linux-dbg
+-- Building x64-linux-rel
+-- Performing post-build validation
+Starting submission of argparse:x64-linux@3.2 to 1 binary cache(s) in the background
+Elapsed time to handle argparse:x64-linux: 718 ms
+Completed submission of vcpkg-cmake:x64-linux@2024-04-23 to 1 binary cache(s) in 2.96 ms
+Installing 4/19 catch2:x64-linux@3.11.0...
+catch2:x64-linux@3.11.0 package ABI: 0b0bb55d0aac2abac3612dadd2117b8b6678a0e78733268629041fdd4a07e439
+Building catch2:x64-linux@3.11.0...
+Downloading https://github.com/catchorg/Catch2/archive/v3.11.0.tar.gz -> catchorg-Catch2-v3.11.0.tar.gz
+Successfully downloaded catchorg-Catch2-v3.11.0.tar.gz
+-- Extracting source /usr/local/share/vcpkg/downloads/catchorg-Catch2-v3.11.0.tar.gz
+-- Applying patch fix-install-path.patch
+-- Using source at /usr/local/share/vcpkg/buildtrees/catch2/src/v3.11.0-9c1ce4c832.clean
+-- Configuring x64-linux
+-- Building x64-linux-dbg
+-- Building x64-linux-rel
+-- Fixing pkgconfig file: /usr/local/share/vcpkg/packages/catch2_x64-linux/lib/pkgconfig/catch2-with-main.pc
+-- Fixing pkgconfig file: /usr/local/share/vcpkg/packages/catch2_x64-linux/lib/pkgconfig/catch2.pc
+-- Fixing pkgconfig file: /usr/local/share/vcpkg/packages/catch2_x64-linux/debug/lib/pkgconfig/catch2-with-main.pc
+-- Fixing pkgconfig file: /usr/local/share/vcpkg/packages/catch2_x64-linux/debug/lib/pkgconfig/catch2.pc
+-- Installing: /usr/local/share/vcpkg/packages/catch2_x64-linux/share/catch2/copyright
+-- Performing post-build validation
+Starting submission of catch2:x64-linux@3.11.0 to 1 binary cache(s) in the background
+Elapsed time to handle catch2:x64-linux: 37 s
+Completed submission of argparse:x64-linux@3.2 to 1 binary cache(s) in 5.2 ms
+Installing 5/19 zlib:x64-linux@1.3.1...
+zlib:x64-linux@1.3.1 package ABI: 9108104ef4a02f3fbd786121dd6f8a2e8972f736c1e4c47c93a27c328e09356d
+Building zlib:x64-linux@1.3.1...
+Downloading https://github.com/madler/zlib/archive/v1.3.1.tar.gz -> madler-zlib-v1.3.1.tar.gz
+Successfully downloaded madler-zlib-v1.3.1.tar.gz
+-- Extracting source /usr/local/share/vcpkg/downloads/madler-zlib-v1.3.1.tar.gz
+-- Applying patch 0001-Prevent-invalid-inclusions-when-HAVE_-is-set-to-0.patch
+-- Applying patch 0002-build-static-or-shared-not-both.patch
+-- Applying patch 0003-android-and-mingw-fixes.patch
+-- Using source at /usr/local/share/vcpkg/buildtrees/zlib/src/v1.3.1-2e5db616bf.clean
+-- Configuring x64-linux
+-- Building x64-linux-dbg
+-- Building x64-linux-rel
+-- Installing: /usr/local/share/vcpkg/packages/zlib_x64-linux/share/zlib/vcpkg-cmake-wrapper.cmake
+-- Fixing pkgconfig file: /usr/local/share/vcpkg/packages/zlib_x64-linux/lib/pkgconfig/zlib.pc
+-- Fixing pkgconfig file: /usr/local/share/vcpkg/packages/zlib_x64-linux/debug/lib/pkgconfig/zlib.pc
+-- Installing: /usr/local/share/vcpkg/packages/zlib_x64-linux/share/zlib/copyright
+-- Performing post-build validation
+Starting submission of zlib:x64-linux@1.3.1 to 1 binary cache(s) in the background
+Elapsed time to handle zlib:x64-linux: 2.4 s
+Completed submission of catch2:x64-linux@3.11.0 to 1 binary cache(s) in 1.5 s
+Installing 6/19 vcpkg-cmake-get-vars:x64-linux@2025-05-29...
+vcpkg-cmake-get-vars:x64-linux@2025-05-29 package ABI: 9601f3d976f1c6bc60850868da9e9e409bedf5fe9e7a91f8f973ebfbb75e58fb
+Building vcpkg-cmake-get-vars:x64-linux@2025-05-29...
+-- Installing: /usr/local/share/vcpkg/packages/vcpkg-cmake-get-vars_x64-linux/share/vcpkg-cmake-get-vars/vcpkg_cmake_get_vars.cmake
+-- Installing: /usr/local/share/vcpkg/packages/vcpkg-cmake-get-vars_x64-linux/share/vcpkg-cmake-get-vars/cmake_get_vars
+-- Installing: /usr/local/share/vcpkg/packages/vcpkg-cmake-get-vars_x64-linux/share/vcpkg-cmake-get-vars/cmake_get_vars/CMakeLists.txt
+-- Installing: /usr/local/share/vcpkg/packages/vcpkg-cmake-get-vars_x64-linux/share/vcpkg-cmake-get-vars/cmake-get-vars.cmake.in
+-- Installing: /usr/local/share/vcpkg/packages/vcpkg-cmake-get-vars_x64-linux/share/vcpkg-cmake-get-vars/vcpkg-port-config.cmake
+-- Installing: /usr/local/share/vcpkg/packages/vcpkg-cmake-get-vars_x64-linux/share/vcpkg-cmake-get-vars/copyright
+-- Performing post-build validation
+Starting submission of vcpkg-cmake-get-vars:x64-linux@2025-05-29 to 1 binary cache(s) in the background
+Elapsed time to handle vcpkg-cmake-get-vars:x64-linux: 19 ms
+Installing 7/19 openssl[core,tools]:x64-linux@3.6.0#3...
+openssl[core,tools]:x64-linux@3.6.0#3 package ABI: fb12b8d78d9c00678fef3b966aea88df747eebd322dec901006fcec87d2d5117
+Building openssl[core,tools]:x64-linux@3.6.0#3...
+Downloading https://github.com/openssl/openssl/archive/openssl-3.6.0.tar.gz -> openssl-openssl-openssl-3.6.0.tar.gz
+Successfully downloaded openssl-openssl-openssl-3.6.0.tar.gz
+-- Extracting source /usr/local/share/vcpkg/downloads/openssl-openssl-openssl-3.6.0.tar.gz
+-- Applying patch cmake-config.patch
+-- Applying patch command-line-length.patch
+-- Applying patch script-prefix.patch
+-- Applying patch aes_cfb128_vaes_encdec_wrapper.diff
+-- Applying patch windows/install-layout.patch
+-- Applying patch windows/install-pdbs.patch
+-- Applying patch windows/install-programs.diff
+-- Applying patch unix/android-cc.patch
+-- Applying patch unix/move-openssldir.patch
+-- Applying patch unix/no-empty-dirs.patch
+-- Applying patch unix/no-static-libs-for-shared.patch
+-- Using source at /usr/local/share/vcpkg/buildtrees/openssl/src/nssl-3.6.0-a2eab2a5bb.clean
+-- Getting CMake variables for x64-linux
+-- Loading CMake variables from /usr/local/share/vcpkg/buildtrees/openssl/cmake-get-vars_C_CXX-x64-linux.cmake.log
+openssl requires Linux kernel headers from the system package manager.
+   They can be installed on Alpine systems via `apk add linux-headers`.
+   They can be installed on Ubuntu systems via `apt install linux-libc-dev`.
+
+-- Getting CMake variables for x64-linux-dbg
+-- Getting CMake variables for x64-linux-rel
+-- Configuring x64-linux-dbg
+-- Configuring x64-linux-rel
+-- Building x64-linux-dbg
+-- Installing x64-linux-dbg
+-- Building x64-linux-rel
+-- Installing x64-linux-rel
+-- Fixing pkgconfig file: /usr/local/share/vcpkg/packages/openssl_x64-linux/lib/pkgconfig/libcrypto.pc
+-- Fixing pkgconfig file: /usr/local/share/vcpkg/packages/openssl_x64-linux/lib/pkgconfig/libssl.pc
+-- Fixing pkgconfig file: /usr/local/share/vcpkg/packages/openssl_x64-linux/lib/pkgconfig/openssl.pc
+-- Fixing pkgconfig file: /usr/local/share/vcpkg/packages/openssl_x64-linux/debug/lib/pkgconfig/libcrypto.pc
+-- Fixing pkgconfig file: /usr/local/share/vcpkg/packages/openssl_x64-linux/debug/lib/pkgconfig/libssl.pc
+-- Fixing pkgconfig file: /usr/local/share/vcpkg/packages/openssl_x64-linux/debug/lib/pkgconfig/openssl.pc
+-- Installing: /usr/local/share/vcpkg/packages/openssl_x64-linux/share/openssl/usage
+-- Installing: /usr/local/share/vcpkg/packages/openssl_x64-linux/share/openssl/copyright
+-- Adjusted RPATH of '/usr/local/share/vcpkg/packages/openssl_x64-linux/tools/openssl/openssl' (From '' -> To '$ORIGIN:$ORIGIN/../../lib')
+-- Performing post-build validation
+Starting submission of openssl[core,tools]:x64-linux@3.6.0#3 to 1 binary cache(s) in the background
+Elapsed time to handle openssl:x64-linux: 2.5 min
+Completed submission of zlib:x64-linux@1.3.1 to 1 binary cache(s) in 30.3 ms
+Completed submission of vcpkg-cmake-get-vars:x64-linux@2025-05-29 to 1 binary cache(s) in 2.62 ms
+Installing 8/19 brotli:x64-linux@1.2.0...
+brotli:x64-linux@1.2.0 package ABI: fd44bac5593b3cd89462a8035fd91f56232e13f765a4834703d702fe81b61bee
+Building brotli:x64-linux@1.2.0...
+Downloading https://github.com/google/brotli/archive/v1.2.0.tar.gz -> google-brotli-v1.2.0.tar.gz
+Successfully downloaded google-brotli-v1.2.0.tar.gz
+-- Extracting source /usr/local/share/vcpkg/downloads/google-brotli-v1.2.0.tar.gz
+-- Applying patch install.patch
+-- Applying patch pkgconfig.patch
+-- Using source at /usr/local/share/vcpkg/buildtrees/brotli/src/v1.2.0-7af7ca71ad.clean
+-- Configuring x64-linux
+-- Building x64-linux-dbg
+-- Building x64-linux-rel
+-- Fixing pkgconfig file: /usr/local/share/vcpkg/packages/brotli_x64-linux/lib/pkgconfig/libbrotlicommon.pc
+-- Fixing pkgconfig file: /usr/local/share/vcpkg/packages/brotli_x64-linux/lib/pkgconfig/libbrotlidec.pc
+-- Fixing pkgconfig file: /usr/local/share/vcpkg/packages/brotli_x64-linux/lib/pkgconfig/libbrotlienc.pc
+-- Fixing pkgconfig file: /usr/local/share/vcpkg/packages/brotli_x64-linux/debug/lib/pkgconfig/libbrotlicommon.pc
+-- Fixing pkgconfig file: /usr/local/share/vcpkg/packages/brotli_x64-linux/debug/lib/pkgconfig/libbrotlidec.pc
+-- Fixing pkgconfig file: /usr/local/share/vcpkg/packages/brotli_x64-linux/debug/lib/pkgconfig/libbrotlienc.pc
+-- Installing: /usr/local/share/vcpkg/packages/brotli_x64-linux/share/brotli/usage
+-- Installing: /usr/local/share/vcpkg/packages/brotli_x64-linux/share/brotli/copyright
+-- Adjusted RPATH of '/usr/local/share/vcpkg/packages/brotli_x64-linux/tools/brotli/brotli' (From '' -> To '$ORIGIN:$ORIGIN/../../lib')
+-- Performing post-build validation
+Starting submission of brotli:x64-linux@1.2.0 to 1 binary cache(s) in the background
+Elapsed time to handle brotli:x64-linux: 12 s
+Completed submission of openssl[core,tools]:x64-linux@3.6.0#3 to 1 binary cache(s) in 4 s
+Installing 9/19 cpp-httplib[brotli,core,openssl,zlib]:x64-linux@0.27.0...
+cpp-httplib[brotli,core,openssl,zlib]:x64-linux@0.27.0 package ABI: ab8387c825337330dfa4980af967a11a5435dc1f4e7d9e2f358817c822fd202c
+Building cpp-httplib[brotli,core,openssl,zlib]:x64-linux@0.27.0...
+Downloading https://github.com/yhirose/cpp-httplib/archive/v0.27.0.tar.gz -> yhirose-cpp-httplib-v0.27.0.tar.gz
+Successfully downloaded yhirose-cpp-httplib-v0.27.0.tar.gz
+-- Extracting source /usr/local/share/vcpkg/downloads/yhirose-cpp-httplib-v0.27.0.tar.gz
+-- Applying patch fix-find-brotli.patch
+-- Using source at /usr/local/share/vcpkg/buildtrees/cpp-httplib/src/v0.27.0-ddcb484909.clean
+-- Configuring x64-linux
+-- Building x64-linux-rel
+-- Installing: /usr/local/share/vcpkg/packages/cpp-httplib_x64-linux/share/cpp-httplib/copyright
+-- Installing: /usr/local/share/vcpkg/packages/cpp-httplib_x64-linux/share/cpp-httplib/usage
+-- Performing post-build validation
+Starting submission of cpp-httplib[brotli,core,openssl,zlib]:x64-linux@0.27.0 to 1 binary cache(s) in the background
+Elapsed time to handle cpp-httplib:x64-linux: 876 ms
+Completed submission of brotli:x64-linux@1.2.0 to 1 binary cache(s) in 238 ms
+Installing 10/19 fast-float:x64-linux@8.1.0...
+fast-float:x64-linux@8.1.0 package ABI: 7d812ba7a0a4409589aa883c3a309bd918de2cd9c36b48df922c2a5eb44ed706
+Building fast-float:x64-linux@8.1.0...
+Downloading https://github.com/fastfloat/fast_float/archive/v8.1.0.tar.gz -> fastfloat-fast_float-v8.1.0.tar.gz
+Successfully downloaded fastfloat-fast_float-v8.1.0.tar.gz
+-- Extracting source /usr/local/share/vcpkg/downloads/fastfloat-fast_float-v8.1.0.tar.gz
+-- Using source at /usr/local/share/vcpkg/buildtrees/fast-float/src/v8.1.0-836312d7ce.clean
+-- Configuring x64-linux
+-- Building x64-linux-rel
+-- Installing: /usr/local/share/vcpkg/packages/fast-float_x64-linux/share/fast-float/usage
+-- Performing post-build validation
+Starting submission of fast-float:x64-linux@8.1.0 to 1 binary cache(s) in the background
+Elapsed time to handle fast-float:x64-linux: 535 ms
+Completed submission of cpp-httplib[brotli,core,openssl,zlib]:x64-linux@0.27.0 to 1 binary cache(s) in 15.8 ms
+Installing 11/19 fmt:x64-linux@12.1.0...
+fmt:x64-linux@12.1.0 package ABI: e19e0e090d40221e10cca54b0bfb3229a360f288764d3d2e890ed961c0d29eff
+Building fmt:x64-linux@12.1.0...
+Downloading https://github.com/fmtlib/fmt/archive/12.1.0.tar.gz -> fmtlib-fmt-12.1.0.tar.gz
+Successfully downloaded fmtlib-fmt-12.1.0.tar.gz
+-- Extracting source /usr/local/share/vcpkg/downloads/fmtlib-fmt-12.1.0.tar.gz
+-- Using source at /usr/local/share/vcpkg/buildtrees/fmt/src/12.1.0-54f1f91231.clean
+-- Configuring x64-linux
+-- Building x64-linux-dbg
+-- Building x64-linux-rel
+-- Fixing pkgconfig file: /usr/local/share/vcpkg/packages/fmt_x64-linux/lib/pkgconfig/fmt.pc
+-- Fixing pkgconfig file: /usr/local/share/vcpkg/packages/fmt_x64-linux/debug/lib/pkgconfig/fmt.pc
+-- Installing: /usr/local/share/vcpkg/packages/fmt_x64-linux/share/fmt/usage
+-- Installing: /usr/local/share/vcpkg/packages/fmt_x64-linux/share/fmt/copyright
+-- Performing post-build validation
+Starting submission of fmt:x64-linux@12.1.0 to 1 binary cache(s) in the background
+Elapsed time to handle fmt:x64-linux: 5.5 s
+Completed submission of fast-float:x64-linux@8.1.0 to 1 binary cache(s) in 7.26 ms
+Installing 12/19 bzip2[core,tool]:x64-linux@1.0.8#6...
+bzip2[core,tool]:x64-linux@1.0.8#6 package ABI: 8d0350b4c06423e939af3e96292329178e8a04db74c0beb09f7bf0361e427681
+Building bzip2[core,tool]:x64-linux@1.0.8#6...
+Downloading bzip2-1.0.8.tar.gz, trying https://sourceware.org/pub/bzip2/bzip2-1.0.8.tar.gz
+error: curl operation failed with error code 6 (Couldn't resolve host name).
+error: Not a transient network error, won't retry download from https://sourceware.org/pub/bzip2/bzip2-1.0.8.tar.gz
+Trying https://www.mirrorservice.org/sites/sourceware.org/pub/bzip2/bzip2-1.0.8.tar.gz
+error: curl operation failed with error code 6 (Couldn't resolve host name).
+error: Not a transient network error, won't retry download from https://www.mirrorservice.org/sites/sourceware.org/pub/bzip2/bzip2-1.0.8.tar.gz
+note: If you are using a proxy, please ensure your proxy settings are correct.
+Possible causes are:
+1. You are actually using an HTTP proxy, but setting HTTPS_PROXY variable to `https://address:port`.
+This is not correct, because `https://` prefix claims the proxy is an HTTPS proxy, while your proxy (v2ray, shadowsocksr, etc...) is an HTTP proxy.
+Try setting `http://address:port` to both HTTP_PROXY and HTTPS_PROXY instead.
+2. If you are using Windows, vcpkg will automatically use your Windows IE Proxy Settings set by your proxy software. See: https://github.com/microsoft/vcpkg-tool/pull/77
+The value set by your proxy might be wrong, or have same `https://` prefix issue.
+3. Your proxy's remote server is out of service.
+If you believe this is not a temporary download server failure and vcpkg needs to be changed to download this file from a different location, please submit an issue to https://github.com/Microsoft/vcpkg/issues
+CMake Error at scripts/cmake/vcpkg_download_distfile.cmake:136 (message):
+  Download failed, halting portfile.
+Call Stack (most recent call first):
+  buildtrees/versioning_/versions/bzip2/2d029da682847c5ebdc54e4dbea001331a02207e/portfile.cmake:1 (vcpkg_download_distfile)
+  scripts/ports.cmake:206 (include)
+
+
+error: building bzip2:x64-linux failed with: BUILD_FAILED
+See https://learn.microsoft.com/vcpkg/troubleshoot/build-failures?WT.mc_id=vcpkg_inproduct_cli for more information.
+Elapsed time to handle bzip2:x64-linux: 28.2 ms
+Please ensure you're using the latest port files with `git pull` and `vcpkg update`.
+Then check for known issues at:
+  https://github.com/microsoft/vcpkg/issues?q=is%3Aissue+is%3Aopen+in%3Atitle+bzip2
+You can submit a new issue at:
+  https://github.com/microsoft/vcpkg/issues/new?title=%5Bbzip2%5D%20build%20error%20on%20x64-linux&body=Copy%20issue%20body%20from%20collapsed%20section%20%22issue_body.md%22%20in%20the%20ci%20log%20output
+::group::issue_body.md
+Package: bzip2[core,tool]:x64-linux@1.0.8#6
+
+**Host Environment**
+
+- Host: x64-linux
+- Compiler: GNU 13.3.0
+- CMake Version: 3.31.10
+-    vcpkg-tool version: 2026-03-04-4b3e4c276b5b87a649e66341e11553e8c577459c
+    vcpkg-scripts version: 751fdf7bbc 2026-03-09 (8 days ago)
+
+**To Reproduce**
+
+`vcpkg install `
+
+**Failure logs**
+
+```
+Downloading bzip2-1.0.8.tar.gz, trying https://sourceware.org/pub/bzip2/bzip2-1.0.8.tar.gz
+error: curl operation failed with error code 6 (Couldn't resolve host name).
+error: Not a transient network error, won't retry download from https://sourceware.org/pub/bzip2/bzip2-1.0.8.tar.gz
+Trying https://www.mirrorservice.org/sites/sourceware.org/pub/bzip2/bzip2-1.0.8.tar.gz
+error: curl operation failed with error code 6 (Couldn't resolve host name).
+error: Not a transient network error, won't retry download from https://www.mirrorservice.org/sites/sourceware.org/pub/bzip2/bzip2-1.0.8.tar.gz
+note: If you are using a proxy, please ensure your proxy settings are correct.
+Possible causes are:
+1. You are actually using an HTTP proxy, but setting HTTPS_PROXY variable to `https://address:port`.
+This is not correct, because `https://` prefix claims the proxy is an HTTPS proxy, while your proxy (v2ray, shadowsocksr, etc...) is an HTTP proxy.
+Try setting `http://address:port` to both HTTP_PROXY and HTTPS_PROXY instead.
+2. If you are using Windows, vcpkg will automatically use your Windows IE Proxy Settings set by your proxy software. See: https://github.com/microsoft/vcpkg-tool/pull/77
+The value set by your proxy might be wrong, or have same `https://` prefix issue.
+3. Your proxy's remote server is out of service.
+If you believe this is not a temporary download server failure and vcpkg needs to be changed to download this file from a different location, please submit an issue to https://github.com/Microsoft/vcpkg/issues
+CMake Error at scripts/cmake/vcpkg_download_distfile.cmake:136 (message):
+  Download failed, halting portfile.
+Call Stack (most recent call first):
+  buildtrees/versioning_/versions/bzip2/2d029da682847c5ebdc54e4dbea001331a02207e/portfile.cmake:1 (vcpkg_download_distfile)
+  scripts/ports.cmake:206 (include)
+
+
+
+```
+
+**Additional context**
+
+<details><summary>vcpkg.json</summary>
+
+```
+{
+  "name": "vcpkg-cache-server",
+  "version-string": "0.0.1",
+  "homepage": "https://github.com/petersteneteg/vcpkg-cache-server",
+  "license": "BSD-3-Clause",
+  "vcpkg-configuration": {
+    "default-registry": {
+      "kind": "builtin",
+      "baseline": "dfb72f61c5a066ab75cd0bdcb2e007228bfc3270"
+    }
+  },
+  "dependencies": [
+    {
+      "name": "cpp-httplib",
+      "features": [
+        "brotli",
+        "openssl",
+        "zlib"
+      ]
+    },
+    {
+      "name": "openssl",
+      "features": [
+        "tools"
+      ]
+    },
+    "libzippp",
+    "spdlog",
+    "argparse",
+    "yaml-cpp",
+    "sqlite-orm",
+    "rapidfuzz",
+    "fmt",
+    "fast-float",
+    "catch2"
+  ]
+}
+
+```
+</details>
+::endgroup::
+
+Completed submission of fmt:x64-linux@12.1.0 to 1 binary cache(s) in 87.5 ms

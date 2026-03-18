@@ -1,0 +1,7 @@
+Package: cpp-httplib
+Feature: zlib
+Depends: zlib
+Architecture: x64-linux
+Multi-Arch: same
+Description: Enables gzip compression support using zlib
+Status: install ok half-installed

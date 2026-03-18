@@ -1,0 +1,6 @@
+Package: openssl
+Feature: tools
+Architecture: x64-linux
+Multi-Arch: same
+Description: Install openssl executable and scripts
+Status: install ok half-installed
