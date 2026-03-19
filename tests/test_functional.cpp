@@ -56,7 +56,6 @@ TEST_CASE("splitByFirst splits on first occurrence of delimiter", "[functional]"
         CHECK(second == "b:c");
     }
     SECTION("only delimiter") {
-        auto [first, second] = splitByFirst(":");
         // This should be empty first, empty second when delimiter is ':'
         // Actually: first = "", second = "" (substr(0,0) = "" and substr(1) = "")
         auto [f, s] = splitByFirst(":", ':');

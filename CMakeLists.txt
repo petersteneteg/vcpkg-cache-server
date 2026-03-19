@@ -4,8 +4,8 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-add_executable(vcpkg-cache-server)
-target_sources(vcpkg-cache-server
+add_library(vcpkg-cache-server-lib OBJECT)
+target_sources(vcpkg-cache-server-lib
     PUBLIC FILE_SET HEADERS TYPE HEADERS BASE_DIRS include FILES
         include/vcpkg-cache-server/settings.hpp
         include/vcpkg-cache-server/functional.hpp
@@ -18,11 +18,6 @@ target_sources(vcpkg-cache-server
         src/functional.cpp
         src/store.cpp
         src/site.cpp
-        src/main.cpp
-        utf.manifest
-        vcpkg.json
-        CMakePresets.json
-        README.md
 )
 
 file(DOWNLOAD https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css
@@ -32,20 +27,23 @@ file(DOWNLOAD https://cdn.jsdelivr.net/npm/htmx.org@2.0.8/dist/htmx.min.js
     ${CMAKE_CURRENT_BINARY_DIR}/resources/htmx.min.js
     EXPECTED_HASH SHA256=22283ef68cb7545914f0a88a1bdedc7256a703d1d580c1d255217d0a50d31313)
 
-target_include_directories(vcpkg-cache-server PUBLIC "resources")
-target_compile_options(vcpkg-cache-server PUBLIC
+target_compile_options(vcpkg-cache-server-lib PUBLIC
     $<$<CXX_COMPILER_ID:MSVC>:/W4 /permissive->
     $<$<CXX_COMPILER_ID:AppleClang,Clang,GNU>:-Wall -Wextra>
 )
 if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
-    target_compile_options(vcpkg-cache-server PUBLIC /utf-8)
-    target_compile_definitions(vcpkg-cache-server PRIVATE
+    target_compile_options(vcpkg-cache-server-lib PUBLIC /utf-8)
+    target_compile_definitions(vcpkg-cache-server-lib PUBLIC
         UNICODE
         _UNICODE
         _USE_MATH_DEFINES
     )
+    set_target_properties(vcpkg-cache-server-lib
+        PROPERTIES
+            MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
+    )
 else()
-    target_compile_options(vcpkg-cache-server PRIVATE
+    target_compile_options(vcpkg-cache-server-lib PRIVATE
         "--embed-dir=${CMAKE_CURRENT_BINARY_DIR}/resources/"
         -Wno-c23-extensions
     )
@@ -53,12 +51,11 @@ endif()
 
 if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "AppleClang")
     find_library(CFNETWORK_FRAMEWORK CFNetwork)
-    target_link_libraries(vcpkg-cache-server PRIVATE ${CFNETWORK_FRAMEWORK})
-
-    target_compile_options(vcpkg-cache-server PUBLIC -fexperimental-library)
+    target_link_libraries(vcpkg-cache-server-lib PRIVATE ${CFNETWORK_FRAMEWORK})
+    target_compile_options(vcpkg-cache-server-lib PUBLIC -fexperimental-library)
 endif()
 
-# External libraries
+#External libraries
 find_package(httplib CONFIG REQUIRED)
 find_package(libzippp CONFIG REQUIRED)
 find_package(spdlog CONFIG REQUIRED)
@@ -66,45 +63,58 @@ find_package(yaml-cpp CONFIG REQUIRED)
 find_package(SqliteOrm CONFIG REQUIRED)
 find_package(fmt CONFIG REQUIRED)
 
-target_link_libraries(vcpkg-cache-server PUBLIC httplib::httplib libzippp::libzippp spdlog::spdlog yaml-cpp::yaml-cpp sqlite_orm::sqlite_orm)
-set_target_properties(vcpkg-cache-server PROPERTIES MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+target_link_libraries(vcpkg-cache-server-lib
+    PUBLIC
+        httplib::httplib
+        libzippp::libzippp
+        spdlog::spdlog
+        yaml-cpp::yaml-cpp
+        sqlite_orm::sqlite_orm
+)
+
+add_executable(vcpkg-cache-server)
+target_sources(vcpkg-cache-server
+    PRIVATE
+        src/main.cpp
+        utf.manifest
+        vcpkg.json
+        CMakePresets.json
+        README.md
+)
+
+target_link_libraries(vcpkg-cache-server
+    PUBLIC
+        vcpkg-cache-server-lib
+)
 
 install(TARGETS vcpkg-cache-server
     RUNTIME        # DLLs, Exes
 )
 
-# Testing
+#Testing
 option(VCACHE_BUILD_TESTS "Build tests" ON)
 if(VCACHE_BUILD_TESTS)
+    enable_testing()
     find_package(Catch2 CONFIG REQUIRED)
-    include(CTest)
     include(Catch)
 
-    add_executable(vcpkg-cache-server-tests
-        tests/test_functional.cpp
-        tests/test_yaml_converters.cpp
-        tests/test_fmt_formatters.cpp
-        tests/test_site_enums.cpp
-        tests/test_database.cpp
-        tests/test_settings.cpp
+    add_executable(vcpkg-cache-server-tests)
+    target_sources(vcpkg-cache-server-tests
+        PRIVATE
+            tests/test_functional.cpp
+            tests/test_yaml_converters.cpp
+            tests/test_fmt_formatters.cpp
+            tests/test_site_enums.cpp
+            tests/test_database.cpp
+            tests/test_settings.cpp
     )
-    target_include_directories(vcpkg-cache-server-tests PRIVATE include)
-    target_compile_options(vcpkg-cache-server-tests PRIVATE
-        $<$<CXX_COMPILER_ID:MSVC>:/W4 /permissive->
-        $<$<CXX_COMPILER_ID:AppleClang,Clang,GNU>:-Wall -Wextra -Wno-c23-extensions>
+    target_link_libraries(vcpkg-cache-server-tests
+        PUBLIC
+            vcpkg-cache-server-lib
     )
-    if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "AppleClang")
-        target_compile_options(vcpkg-cache-server-tests PRIVATE -fexperimental-library)
-    endif()
+
     target_link_libraries(vcpkg-cache-server-tests PRIVATE
         Catch2::Catch2WithMain
-        fmt::fmt
-        spdlog::spdlog
-        yaml-cpp::yaml-cpp
-        sqlite_orm::sqlite_orm
     )
-    set_target_properties(vcpkg-cache-server-tests PROPERTIES
-        MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
-    )
-    catch_discover_tests(vcpkg-cache-server-tests)
+    catch_discover_tests(vcpkg-cache-server-tests DISCOVERY_MODE PRE_TEST)
 endif()

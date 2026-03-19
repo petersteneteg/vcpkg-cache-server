@@ -596,13 +596,15 @@ std::string match(std::string_view abi, std::string_view package, const Store& s
     std::ranges::sort(matches, std::less<>{},
                       [&](const auto& info) { return detail::missmatches(info.abi, abiMap); });
 
-    const auto str = matches | std::views::take(3) | std::views::transform([&](const auto& info) {
-                         return fmt::format("<div><h3>Time: {:%Y-%m-%d %H:%M:%S} {}</h3>{}</div>",
-                                            info.time, info.sha, detail::formatDiff(abiMap, info.abi));
-                     }) |
-                     std::views::join | std::ranges::to<std::string>();
+    const auto str =
+        matches | std::views::take(3) | std::views::transform([&](const auto& info) {
+            return fmt::format("<div><h3>Time: {:%Y-%m-%d %H:%M:%S} {}</h3>{}</div>", info.time,
+                               info.sha, detail::formatDiff(abiMap, info.abi));
+        }) |
+        std::views::join | std::ranges::to<std::string>();
 
-    return fmt::format(R"(<h1>Target ABI:</h1><div>{}</div><div>{}</div>)", detail::formatMap(abiMap), str);
+    return fmt::format(R"(<h1>Target ABI:</h1><div>{}</div><div>{}</div>)",
+                       detail::formatMap(abiMap), str);
 }
 
 std::string compare(std::string_view sha, const Store& store, Mode mode) {
@@ -623,11 +625,12 @@ std::string compare(std::string_view sha, const Store& store, Mode mode) {
     std::ranges::sort(matches, std::less<>{},
                       [&](const auto& info) { return detail::missmatches(info.abi, abiMap); });
 
-    const auto str = matches | std::views::take(5) | std::views::transform([&](const auto& info) {
-                         return fmt::format("<div><h3>Time: {:%Y-%m-%d %H:%M:%S} {}</h3>{}</div>",
-                                            info.time, info.sha, detail::formatDiff(abiMap, info.abi));
-                     }) |
-                     std::views::join | std::ranges::to<std::string>();
+    const auto str =
+        matches | std::views::take(5) | std::views::transform([&](const auto& info) {
+            return fmt::format("<div><h3>Time: {:%Y-%m-%d %H:%M:%S} {}</h3>{}</div>", info.time,
+                               info.sha, detail::formatDiff(abiMap, info.abi));
+        }) |
+        std::views::join | std::ranges::to<std::string>();
 
     const auto nav =
         detail::nav({{"Packages", "/"},
@@ -917,8 +920,8 @@ std::string downloads(db::Database& db, Mode mode, std::optional<size_t> sortIdx
             auto&& [count, item] = countAndItem;
             auto&& [time, ip, user, name, downloads, size, age, sha] = item;
             return fmt::format(itemStr, Time{Duration{time}}, ip, user,
-                               detail::link(fmt::format("/find/{}", name), name), downloads, ByteSize{size},
-                               FormatDuration{static_cast<Rep>(age)},
+                               detail::link(fmt::format("/find/{}", name), name), downloads,
+                               ByteSize{size}, FormatDuration{static_cast<Rep>(age)},
                                detail::link(fmt::format("/package/{}", sha), sha.substr(0, 10)),
                                (count == data.size() ? trigger : std::string{}));
         }) |

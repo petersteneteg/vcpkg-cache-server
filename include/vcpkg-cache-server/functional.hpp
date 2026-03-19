@@ -190,7 +190,7 @@ auto strToNum(std::string_view str) -> std::optional<T> {
 
 inline std::pair<std::string_view, std::string_view> parseAuthHeader(
     std::string_view authHeader) {
-    auto [scheme, token] = splitByFirst(authHeader);
+    auto [scheme, token] = splitByFirst(trim(authHeader));
     scheme = trim(scheme);
     token = trim(token);
     return {scheme, token};
