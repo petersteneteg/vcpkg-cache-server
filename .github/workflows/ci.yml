@@ -68,3 +68,6 @@ jobs:
 
       - name: Build
         run: cmake --build builds/vcpkg-cache-server-${{ matrix.preset }} --parallel
+
+      - name: Test
+        run: ctest --test-dir builds/vcpkg-cache-server-${{ matrix.preset }} --output-on-failure
