@@ -76,6 +76,16 @@ namespace detail {
 std::string deliver(std::string_view content, Mode mode);
 std::string nav(const std::vector<std::pair<std::string, std::string>>& path = {});
 
+size_t missmatches(const std::map<std::string, std::string>& map1,
+                   const std::map<std::string, std::string>& map2);
+std::string formatDiff(const std::map<std::string, std::string>& dstMap,
+                       const std::map<std::string, std::string>& srcMap);
+std::string formatMap(const std::map<std::string, std::string>& range);
+std::string button(std::string_view url, std::string_view content, Sort tag, Sort currentSort,
+                   Order currentOrder);
+std::string navItem(std::string_view name, std::string_view url, bool active);
+std::string link(std::string_view url, std::string_view content);
+
 }  // namespace detail
 
 template <typename T>

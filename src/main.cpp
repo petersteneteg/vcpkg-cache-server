@@ -14,8 +14,6 @@
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/sinks/basic_file_sink.h>
 
-#include <fast_float/fast_float.h>
-
 #include <filesystem>
 #include <fstream>
 #include <map>
@@ -70,24 +68,6 @@ auto logger(std::shared_ptr<spdlog::logger> log) {
     };
 }
 
-template <typename T>
-auto strToNum(std::string_view str) -> std::optional<T> {
-    T num;
-    auto [p, ec] = fast_float::from_chars(str.data(), str.data() + str.size(), num);
-    if (ec != std::errc() || p != str.data() + str.size()) {
-        return std::nullopt;
-    } else {
-        return num;
-    }
-}
-
-std::pair<std::string_view, std::string_view> parseAuthHeader(std::string_view authHeader) {
-    auto [scheme, token] = fp::splitByFirst(authHeader);
-    scheme = fp::trim(scheme);
-    token = fp::trim(token);
-    return {scheme, token};
-}
-
 httplib::Server::HandlerWithContentReader authorizeRequest(
     const Authorization& auth, httplib::Server::HandlerWithContentReader handler) {
     return [handler, &auth](const httplib::Request& req, httplib::Response& res,
@@ -99,7 +79,7 @@ httplib::Server::HandlerWithContentReader authorizeRequest(
         }
 
         const auto authHeader = req.get_header_value("Authorization");
-        const auto [scheme, token] = parseAuthHeader(authHeader);
+        const auto [scheme, token] = fp::parseAuthHeader(authHeader);
 
         if (scheme != "Bearer" || !auth.write.contains(token)) {
             res.set_header("WWW-Authenticate", "Bearer");
@@ -145,7 +125,7 @@ std::pair<std::string, std::string> requestUserToken(const httplib::Request& req
                                                      const Authorization& auth) {
     const auto authHeader = fp::mGet(req.headers, "Authorization");
     const auto [scheme, token] =
-        authHeader.transform(parseAuthHeader)
+        authHeader.transform(fp::parseAuthHeader)
             .value_or(std::pair<std::string_view, std::string_view>{"-", "-"});
 
     const auto user = mGet(auth.write, token).value_or("-");
@@ -427,7 +407,7 @@ int main(int argc, char* argv[]) {
             .value_or(site::Sort::Default);
     };
     const auto sortIdx = [](const httplib::Request& req) -> std::optional<size_t> {
-        return fp::mGet(req.params, "sortidx").and_then(strToNum<size_t>);
+        return fp::mGet(req.params, "sortidx").and_then(fp::strToNum<size_t>);
     };
 
     const auto selection =
@@ -445,8 +425,8 @@ int main(int argc, char* argv[]) {
         return fp::mGet(req.params, "order").and_then(enumTo<site::Order>{});
     };
     const auto limit = [](const httplib::Request& req) -> site::Limit {
-        return {.offset = fp::mGet(req.params, "offset").and_then(strToNum<size_t>),
-                .limit = fp::mGet(req.params, "limit").and_then(strToNum<size_t>)};
+        return {.offset = fp::mGet(req.params, "offset").and_then(fp::strToNum<size_t>),
+                .limit = fp::mGet(req.params, "limit").and_then(fp::strToNum<size_t>)};
     };
 
     const auto search = [](const httplib::Request& req) -> std::string {
