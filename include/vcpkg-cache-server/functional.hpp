@@ -17,6 +17,8 @@
 
 #include <yaml-cpp/yaml.h>
 
+#include <fast_float/fast_float.h>
+
 namespace vcache {
 
 using Time = std::filesystem::file_time_type;
@@ -175,6 +177,25 @@ using is_detected_convertible = std::is_convertible<detected_t<Op, Args...>, To>
 template <class To, template <class...> class Op, class... Args>
 constexpr bool is_detected_convertible_v = is_detected_convertible<To, Op, Args...>::value;
 
+template <typename T>
+auto strToNum(std::string_view str) -> std::optional<T> {
+    T num;
+    auto [p, ec] = fast_float::from_chars(str.data(), str.data() + str.size(), num);
+    if (ec != std::errc() || p != str.data() + str.size()) {
+        return std::nullopt;
+    } else {
+        return num;
+    }
+}
+
+inline std::pair<std::string_view, std::string_view> parseAuthHeader(
+    std::string_view authHeader) {
+    auto [scheme, token] = splitByFirst(trim(authHeader));
+    scheme = trim(scheme);
+    token = trim(token);
+    return {scheme, token};
+}
+
 }  // namespace fp
 
 enum struct ByteSize : size_t {};
@@ -307,7 +328,7 @@ struct convert<std::chrono::duration<Rep, Period>> {
 
         c::seconds res{};
         while (!rest.empty()) {
-            std::tie(current, rest) = vcache::fp::splitByFirst(val);
+            std::tie(current, rest) = vcache::fp::splitByFirst(rest);
             const auto tval = vcache::fp::trim(current);
             using vcache::fp::remove_suffix;
             auto [str, factor] = [&]() -> std::pair<std::string_view, std::chrono::seconds> {
