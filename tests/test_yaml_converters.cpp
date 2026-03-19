@@ -131,3 +131,28 @@ TEST_CASE("Duration YAML parsing rejects invalid input", "[yaml][duration]") {
         CHECK_FALSE(YAML::convert<seconds>::decode(node, result));
     }
 }
+
+TEST_CASE("Duration YAML parsing handles multi-part durations", "[yaml][duration]") {
+    using namespace std::chrono;
+
+    SECTION("days and hours") {
+        YAML::Node node = YAML::Load("1d 2h");
+        auto result = node.as<seconds>();
+        CHECK(result == duration_cast<seconds>(days{1}) + hours{2});
+    }
+    SECTION("hours and minutes") {
+        YAML::Node node = YAML::Load("3h 30m");
+        auto result = node.as<seconds>();
+        CHECK(result == hours{3} + minutes{30});
+    }
+    SECTION("days, hours, minutes, and seconds") {
+        YAML::Node node = YAML::Load("1d 2h 30m 15s");
+        auto result = node.as<seconds>();
+        CHECK(result == duration_cast<seconds>(days{1}) + hours{2} + minutes{30} + seconds{15});
+    }
+    SECTION("years and days") {
+        YAML::Node node = YAML::Load("1y 30d");
+        auto result = node.as<seconds>();
+        CHECK(result == duration_cast<seconds>(years{1}) + duration_cast<seconds>(days{30}));
+    }
+}

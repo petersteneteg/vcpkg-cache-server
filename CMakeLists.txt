@@ -74,34 +74,37 @@ install(TARGETS vcpkg-cache-server
 )
 
 # Testing
-find_package(Catch2 CONFIG REQUIRED)
-include(CTest)
-include(Catch)
+option(VCACHE_BUILD_TESTS "Build tests" ON)
+if(VCACHE_BUILD_TESTS)
+    find_package(Catch2 CONFIG REQUIRED)
+    include(CTest)
+    include(Catch)
 
-add_executable(vcpkg-cache-server-tests
-    tests/test_functional.cpp
-    tests/test_yaml_converters.cpp
-    tests/test_fmt_formatters.cpp
-    tests/test_site_enums.cpp
-    tests/test_database.cpp
-    tests/test_settings.cpp
-)
-target_include_directories(vcpkg-cache-server-tests PRIVATE include)
-target_compile_options(vcpkg-cache-server-tests PRIVATE
-    $<$<CXX_COMPILER_ID:MSVC>:/W4 /permissive->
-    $<$<CXX_COMPILER_ID:AppleClang,Clang,GNU>:-Wall -Wextra -Wno-c23-extensions>
-)
-if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "AppleClang")
-    target_compile_options(vcpkg-cache-server-tests PRIVATE -fexperimental-library)
+    add_executable(vcpkg-cache-server-tests
+        tests/test_functional.cpp
+        tests/test_yaml_converters.cpp
+        tests/test_fmt_formatters.cpp
+        tests/test_site_enums.cpp
+        tests/test_database.cpp
+        tests/test_settings.cpp
+    )
+    target_include_directories(vcpkg-cache-server-tests PRIVATE include)
+    target_compile_options(vcpkg-cache-server-tests PRIVATE
+        $<$<CXX_COMPILER_ID:MSVC>:/W4 /permissive->
+        $<$<CXX_COMPILER_ID:AppleClang,Clang,GNU>:-Wall -Wextra -Wno-c23-extensions>
+    )
+    if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "AppleClang")
+        target_compile_options(vcpkg-cache-server-tests PRIVATE -fexperimental-library)
+    endif()
+    target_link_libraries(vcpkg-cache-server-tests PRIVATE
+        Catch2::Catch2WithMain
+        fmt::fmt
+        spdlog::spdlog
+        yaml-cpp::yaml-cpp
+        sqlite_orm::sqlite_orm
+    )
+    set_target_properties(vcpkg-cache-server-tests PROPERTIES
+        MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
+    )
+    catch_discover_tests(vcpkg-cache-server-tests)
 endif()
-target_link_libraries(vcpkg-cache-server-tests PRIVATE
-    Catch2::Catch2WithMain
-    fmt::fmt
-    spdlog::spdlog
-    yaml-cpp::yaml-cpp
-    sqlite_orm::sqlite_orm
-)
-set_target_properties(vcpkg-cache-server-tests PROPERTIES
-    MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
-)
-catch_discover_tests(vcpkg-cache-server-tests)

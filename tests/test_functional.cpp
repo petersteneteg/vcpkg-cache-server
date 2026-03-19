@@ -1,4 +1,5 @@
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/catch_approx.hpp>
 
 #include <vcpkg-cache-server/functional.hpp>
 
@@ -284,5 +285,87 @@ TEST_CASE("FmtSel formats conditionally", "[functional]") {
     SECTION("false selects second value") {
         auto result = fmt::format("{}", FmtSel{false, "yes", "no"});
         CHECK(result == "no");
+    }
+}
+
+// ============================================================================
+// strToNum - numeric parsing
+// ============================================================================
+
+TEST_CASE("strToNum parses valid integers", "[functional]") {
+    SECTION("basic integer") {
+        auto result = strToNum<size_t>("42");
+        REQUIRE(result.has_value());
+        CHECK(*result == 42);
+    }
+    SECTION("zero") {
+        auto result = strToNum<size_t>("0");
+        REQUIRE(result.has_value());
+        CHECK(*result == 0);
+    }
+    SECTION("large number") {
+        auto result = strToNum<size_t>("1000000");
+        REQUIRE(result.has_value());
+        CHECK(*result == 1000000);
+    }
+}
+
+TEST_CASE("strToNum parses valid doubles", "[functional]") {
+    SECTION("basic double") {
+        auto result = strToNum<double>("3.14");
+        REQUIRE(result.has_value());
+        CHECK(*result == Catch::Approx(3.14));
+    }
+    SECTION("negative double") {
+        auto result = strToNum<double>("-2.5");
+        REQUIRE(result.has_value());
+        CHECK(*result == Catch::Approx(-2.5));
+    }
+}
+
+TEST_CASE("strToNum returns nullopt for invalid input", "[functional]") {
+    SECTION("empty string") {
+        CHECK_FALSE(strToNum<size_t>("").has_value());
+    }
+    SECTION("non-numeric") {
+        CHECK_FALSE(strToNum<size_t>("abc").has_value());
+    }
+    SECTION("trailing non-numeric") {
+        CHECK_FALSE(strToNum<size_t>("42abc").has_value());
+    }
+    SECTION("leading non-numeric") {
+        CHECK_FALSE(strToNum<size_t>("abc42").has_value());
+    }
+}
+
+// ============================================================================
+// parseAuthHeader - authorization header parsing
+// ============================================================================
+
+TEST_CASE("parseAuthHeader splits scheme and token", "[functional]") {
+    SECTION("Bearer token") {
+        auto [scheme, token] = parseAuthHeader("Bearer mytoken123");
+        CHECK(scheme == "Bearer");
+        CHECK(token == "mytoken123");
+    }
+    SECTION("Basic auth") {
+        auto [scheme, token] = parseAuthHeader("Basic dXNlcjpwYXNz");
+        CHECK(scheme == "Basic");
+        CHECK(token == "dXNlcjpwYXNz");
+    }
+    SECTION("trims whitespace") {
+        auto [scheme, token] = parseAuthHeader("  Bearer   mytoken  ");
+        CHECK(scheme == "Bearer");
+        CHECK(token == "mytoken");
+    }
+    SECTION("scheme only, no token") {
+        auto [scheme, token] = parseAuthHeader("Bearer");
+        CHECK(scheme == "Bearer");
+        CHECK(token == "");
+    }
+    SECTION("empty header") {
+        auto [scheme, token] = parseAuthHeader("");
+        CHECK(scheme == "");
+        CHECK(token == "");
     }
 }

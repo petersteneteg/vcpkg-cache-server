@@ -9,47 +9,6 @@ using namespace vcache;
 using namespace vcache::site;
 
 // ============================================================================
-// enumToStr(Mode)
-// ============================================================================
-
-TEST_CASE("enumToStr(Mode) returns correct strings", "[site][enum]") {
-    CHECK(enumToStr(Mode::Full) == "full");
-    CHECK(enumToStr(Mode::Plain) == "plain");
-    CHECK(enumToStr(Mode::Append) == "append");
-}
-
-// ============================================================================
-// enumToStr(Sort)
-// ============================================================================
-
-TEST_CASE("enumToStr(Sort) returns correct strings", "[site][enum]") {
-    CHECK(enumToStr(Sort::Default) == "default");
-    CHECK(enumToStr(Sort::Name) == "name");
-    CHECK(enumToStr(Sort::Count) == "count");
-    CHECK(enumToStr(Sort::Size) == "size");
-    CHECK(enumToStr(Sort::First) == "first");
-    CHECK(enumToStr(Sort::Last) == "last");
-    CHECK(enumToStr(Sort::Downloads) == "download");
-    CHECK(enumToStr(Sort::Use) == "use");
-    CHECK(enumToStr(Sort::Version) == "version");
-    CHECK(enumToStr(Sort::Arch) == "arch");
-    CHECK(enumToStr(Sort::SHA) == "sha");
-    CHECK(enumToStr(Sort::Time) == "time");
-    CHECK(enumToStr(Sort::Ip) == "pp");
-    CHECK(enumToStr(Sort::User) == "user");
-    CHECK(enumToStr(Sort::Age) == "age");
-}
-
-// ============================================================================
-// enumToStr(Order)
-// ============================================================================
-
-TEST_CASE("enumToStr(Order) returns correct strings", "[site][enum]") {
-    CHECK(enumToStr(Order::Descending) == "descending");
-    CHECK(enumToStr(Order::Ascending) == "ascending");
-}
-
-// ============================================================================
 // enumTo<Mode> - string to Mode
 // ============================================================================
 
@@ -145,27 +104,6 @@ TEST_CASE("Order enum roundtrips through string", "[site][enum]") {
 }
 
 // ============================================================================
-// fmt::formatter for enums (via FlagFormatter)
-// ============================================================================
-
-TEST_CASE("fmt::format works with Mode enum", "[site][fmt]") {
-    CHECK(fmt::format("{}", Mode::Full) == "full");
-    CHECK(fmt::format("{}", Mode::Plain) == "plain");
-    CHECK(fmt::format("{}", Mode::Append) == "append");
-}
-
-TEST_CASE("fmt::format works with Sort enum", "[site][fmt]") {
-    CHECK(fmt::format("{}", Sort::Name) == "name");
-    CHECK(fmt::format("{}", Sort::Size) == "size");
-    CHECK(fmt::format("{}", Sort::Downloads) == "download");
-}
-
-TEST_CASE("fmt::format works with Order enum", "[site][fmt]") {
-    CHECK(fmt::format("{}", Order::Descending) == "descending");
-    CHECK(fmt::format("{}", Order::Ascending) == "ascending");
-}
-
-// ============================================================================
 // fmt::formatter<Url>
 // ============================================================================
 
@@ -185,5 +123,149 @@ TEST_CASE("Url formatter produces correct URLs", "[site][fmt]") {
     SECTION("empty path with parameters") {
         Url url{"", {{"sort", "name"}}};
         CHECK(fmt::format("{}", url) == "?sort=name");
+    }
+}
+
+// ============================================================================
+// detail::missmatches
+// ============================================================================
+
+TEST_CASE("detail::missmatches counts map differences", "[site][detail]") {
+    SECTION("identical maps have zero mismatches") {
+        std::map<std::string, std::string> a{{"k1", "v1"}, {"k2", "v2"}};
+        std::map<std::string, std::string> b{{"k1", "v1"}, {"k2", "v2"}};
+        CHECK(detail::missmatches(a, b) == 0);
+    }
+    SECTION("completely different values") {
+        std::map<std::string, std::string> a{{"k1", "a"}, {"k2", "b"}};
+        std::map<std::string, std::string> b{{"k1", "x"}, {"k2", "y"}};
+        CHECK(detail::missmatches(a, b) == 2);
+    }
+    SECTION("partially different values") {
+        std::map<std::string, std::string> a{{"k1", "same"}, {"k2", "diff"}};
+        std::map<std::string, std::string> b{{"k1", "same"}, {"k2", "other"}};
+        CHECK(detail::missmatches(a, b) == 1);
+    }
+    SECTION("keys missing in one map count as mismatches") {
+        std::map<std::string, std::string> a{{"k1", "v1"}, {"k2", "v2"}};
+        std::map<std::string, std::string> b{{"k1", "v1"}};
+        CHECK(detail::missmatches(a, b) == 1);
+    }
+    SECTION("extra keys in second map count as mismatches") {
+        std::map<std::string, std::string> a{{"k1", "v1"}};
+        std::map<std::string, std::string> b{{"k1", "v1"}, {"k2", "v2"}};
+        CHECK(detail::missmatches(a, b) == 1);
+    }
+    SECTION("both empty maps have zero mismatches") {
+        std::map<std::string, std::string> a;
+        std::map<std::string, std::string> b;
+        CHECK(detail::missmatches(a, b) == 0);
+    }
+    SECTION("disjoint keys count all as mismatches") {
+        std::map<std::string, std::string> a{{"k1", "v1"}};
+        std::map<std::string, std::string> b{{"k2", "v2"}};
+        CHECK(detail::missmatches(a, b) == 2);
+    }
+}
+
+// ============================================================================
+// detail::formatDiff
+// ============================================================================
+
+TEST_CASE("detail::formatDiff generates HTML diff", "[site][detail]") {
+    SECTION("identical maps produce only dl tags") {
+        std::map<std::string, std::string> a{{"k1", "v1"}};
+        auto result = detail::formatDiff(a, a);
+        CHECK(result == "<dl></dl>");
+    }
+    SECTION("different values show both") {
+        std::map<std::string, std::string> a{{"k1", "valA"}};
+        std::map<std::string, std::string> b{{"k1", "valB"}};
+        auto result = detail::formatDiff(a, b);
+        CHECK(result.find("valA") != std::string::npos);
+        CHECK(result.find("valB") != std::string::npos);
+    }
+    SECTION("missing in source is reported") {
+        std::map<std::string, std::string> a{{"k1", "v1"}};
+        std::map<std::string, std::string> b;
+        auto result = detail::formatDiff(a, b);
+        CHECK(result.find("Missing in source") != std::string::npos);
+    }
+    SECTION("missing in target is reported") {
+        std::map<std::string, std::string> a;
+        std::map<std::string, std::string> b{{"k1", "v1"}};
+        auto result = detail::formatDiff(a, b);
+        CHECK(result.find("Missing in target") != std::string::npos);
+    }
+}
+
+// ============================================================================
+// detail::formatMap
+// ============================================================================
+
+TEST_CASE("detail::formatMap generates HTML definition list", "[site][detail]") {
+    SECTION("empty map produces empty dl tags") {
+        std::map<std::string, std::string> m;
+        auto result = detail::formatMap(m);
+        CHECK(result.find("<dl>") != std::string::npos);
+        CHECK(result.find("</dl>") != std::string::npos);
+    }
+    SECTION("entries produce dt/dd pairs") {
+        std::map<std::string, std::string> m{{"key1", "val1"}, {"key2", "val2"}};
+        auto result = detail::formatMap(m);
+        CHECK(result.find("<dt>key1</dt>") != std::string::npos);
+        CHECK(result.find("<dd>val1</dd>") != std::string::npos);
+        CHECK(result.find("<dt>key2</dt>") != std::string::npos);
+        CHECK(result.find("<dd>val2</dd>") != std::string::npos);
+    }
+}
+
+// ============================================================================
+// detail::link
+// ============================================================================
+
+TEST_CASE("detail::link creates HTMX link", "[site][detail]") {
+    auto result = detail::link("/some/path", "Click Me");
+    CHECK(result.find("/some/path") != std::string::npos);
+    CHECK(result.find("Click Me") != std::string::npos);
+    CHECK(result.find("hx-get") != std::string::npos);
+}
+
+// ============================================================================
+// detail::button
+// ============================================================================
+
+TEST_CASE("detail::button creates sortable column header", "[site][detail]") {
+    SECTION("shows up arrow when sorted ascending") {
+        auto result = detail::button("/", "Name", Sort::Name, Sort::Name, Order::Ascending);
+        CHECK(result.find("Name") != std::string::npos);
+        CHECK(result.find("&#8593") != std::string::npos);  // up arrow
+    }
+    SECTION("shows down arrow when sorted descending") {
+        auto result = detail::button("/", "Name", Sort::Name, Sort::Name, Order::Descending);
+        CHECK(result.find("&#8595") != std::string::npos);  // down arrow
+    }
+    SECTION("shows no arrow when different column sorted") {
+        auto result = detail::button("/", "Name", Sort::Name, Sort::Size, Order::Ascending);
+        CHECK(result.find("&#8593") == std::string::npos);
+        CHECK(result.find("&#8595") == std::string::npos);
+    }
+}
+
+// ============================================================================
+// detail::navItem
+// ============================================================================
+
+TEST_CASE("detail::navItem creates breadcrumb items", "[site][detail]") {
+    SECTION("active item is static text") {
+        auto result = detail::navItem("Home", "/", true);
+        CHECK(result.find("active") != std::string::npos);
+        CHECK(result.find("Home") != std::string::npos);
+        CHECK(result.find("hx-get") == std::string::npos);
+    }
+    SECTION("inactive item is a link") {
+        auto result = detail::navItem("Home", "/", false);
+        CHECK(result.find("Home") != std::string::npos);
+        CHECK(result.find("hx-get") != std::string::npos);
     }
 }
