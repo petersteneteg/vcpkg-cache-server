@@ -39,4 +39,6 @@ struct Settings {
 
 Settings parseArgs(int argc, char* argv[]);
 
+std::string generateConfigYaml(const Settings& settings);
+
 }  // namespace vcache
