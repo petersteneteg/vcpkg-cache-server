@@ -122,10 +122,17 @@ TEST_CASE("generateConfigYaml reflects explicitly set values", "[settings][gener
     CHECK(doc["maintenance"]["dry_run"].as<bool>() == true);
     CHECK(doc["maintenance"]["max_total_size"].as<ByteSize>() == ByteSize{100'000'000'000});
     CHECK(doc["maintenance"]["max_package_size"].as<ByteSize>() == ByteSize{1'000'000'000});
-    CHECK(doc["maintenance"]["max_age"].as<Duration>() ==
-          std::chrono::duration_cast<Duration>(std::chrono::years{1}));
-    CHECK(doc["maintenance"]["max_unused"].as<Duration>() ==
-          std::chrono::duration_cast<Duration>(std::chrono::days{30}));
+
+    // Compare durations via std::chrono::seconds (rep is long long, unambiguously printable on all
+    // platforms including macOS/ARM64 where Duration::rep is __int128).
+    namespace c = std::chrono;
+    const auto toSec = [](Duration d) {
+        return c::duration_cast<c::seconds>(d).count();
+    };
+    CHECK(toSec(doc["maintenance"]["max_age"].as<Duration>()) ==
+          toSec(c::duration_cast<Duration>(c::years{1})));
+    CHECK(toSec(doc["maintenance"]["max_unused"].as<Duration>()) ==
+          toSec(c::duration_cast<Duration>(c::days{30})));
 
     // Verify that the formatted duration strings are human-readable
     CHECK(doc["maintenance"]["max_age"].as<std::string>() == "1y");
