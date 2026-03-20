@@ -91,6 +91,23 @@ install(TARGETS vcpkg-cache-server
     RUNTIME        # DLLs, Exes
 )
 
+# Packaging
+set(CPACK_GENERATOR "TGZ")
+set(CPACK_INCLUDE_TOPLEVEL_DIRECTORY OFF)
+if(APPLE)
+    set(_cpack_os "macos")
+elseif(WIN32)
+    set(_cpack_os "windows")
+else()
+    string(TOLOWER "${CMAKE_SYSTEM_NAME}" _cpack_os)
+endif()
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm|aarch64|ARM64")
+    set(CPACK_SYSTEM_NAME "${_cpack_os}-arm64")
+else()
+    set(CPACK_SYSTEM_NAME "${_cpack_os}-x64")
+endif()
+include(CPack)
+
 #Testing
 option(VCACHE_BUILD_TESTS "Build tests" ON)
 if(VCACHE_BUILD_TESTS)
@@ -117,4 +134,9 @@ if(VCACHE_BUILD_TESTS)
         Catch2::Catch2WithMain
     )
     catch_discover_tests(vcpkg-cache-server-tests DISCOVERY_MODE PRE_TEST)
+
+    add_test(
+        NAME run-server
+        COMMAND vcpkg-cache-server --help
+    )
 endif()

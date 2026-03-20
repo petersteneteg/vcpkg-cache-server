@@ -2,8 +2,12 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+    tags:
+      - "v*"
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -13,18 +17,22 @@ env:
 
 jobs:
   build:
-    name: ${{ matrix.name }}
-    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
+        system: [Linux, Macos]
+        configuration: [Release, Debug]
+
         include:
-          - name: Linux (GCC)
+          - system: Linux
             os: ubuntu-latest
             preset: ninja-developer
-          - name: macOS (Xcode)
+          - system: Macos
             os: macos-latest
             preset: xcode-developer-arm64
+
+    name: "Build ${{ matrix.system }} ${{ matrix.configuration }}"
+    runs-on: ${{ matrix.os }}
 
     steps:
       - name: Install GCC 15
@@ -64,10 +72,139 @@ jobs:
           echo "VCPKG_ROOT=`pwd`" >> $GITHUB_ENV
     
       - name: Configure
-        run: cmake -S vcpkg-cache-server --preset ${{ matrix.preset }}
+        run: >
+          cmake -S vcpkg-cache-server -B build --preset ${{ matrix.preset }}
+          -DCMAKE_BUILD_TYPE=${{ matrix.configuration }}
 
       - name: Build
-        run: cmake --build builds/vcpkg-cache-server-${{ matrix.preset }} --parallel
+        run: cmake --build build --config ${{ matrix.configuration }} --parallel
 
       - name: Test
-        run: ctest --test-dir builds/vcpkg-cache-server-${{ matrix.preset }} --output-on-failure
+        run: ctest -C ${{ matrix.configuration }} --test-dir build --output-on-failure
+
+      - name: Package
+        working-directory: build
+        run: cpack -C ${{ matrix.configuration }}
+
+      - name: Upload Artifact
+        if: matrix.configuration == 'Release'
+        uses: actions/upload-artifact@v7
+        with:
+          name: package-${{ matrix.preset }}
+          path: build/vcpkg-cache-server-*.tar.gz
+
+  clang-tidy:
+    name: "Clang-tidy"
+    if: github.event_name == 'pull_request'
+    permissions:
+      pull-requests: write
+    runs-on: ubuntu-24.04
+    timeout-minutes: 320
+    steps:
+
+    - name: "Setup Clang"
+      shell: bash
+      run: |
+        wget https://apt.llvm.org/llvm.sh
+        chmod +x llvm.sh
+        sudo ./llvm.sh 21 all
+
+        echo "CC=clang-21" >> $GITHUB_ENV
+        echo "CXX=clang++-21" >> $GITHUB_ENV
+        echo "CXXFLAGS=-stdlib=libc++" >> $GITHUB_ENV
+        echo "LDFLAGS=-stdlib=libc++" >> $GITHUB_ENV
+        echo "LLVM_PATH=$(llvm-config-21 --bindir)" >> $GITHUB_ENV
+
+    - name: "Clone Vcpkg Cache Server"
+      uses: actions/checkout@v6
+      with:
+        path: vcpkg-cache-server
+
+    - name: "Get Vcpkg SHA"
+      shell: bash
+      run: |
+        SHA=`jq -r '.["vcpkg-configuration"].["default-registry"].baseline' vcpkg-cache-server/vcpkg.json`
+        echo "VCPKG_SHA=${SHA}" >> $GITHUB_ENV
+    - name: "Clone Vcpkg"
+      uses: actions/checkout@v6
+      with:
+        repository: microsoft/vcpkg
+        ref: ${{ env.VCPKG_SHA }}
+        fetch-depth: 0
+        path: vcpkg
+    - name: "VCPKG Update"
+      shell: bash
+      run: |
+        cd vcpkg
+        ./bootstrap-vcpkg.sh
+        echo "VCPKG_INSTALLATION_ROOT=`pwd`" >> $GITHUB_ENV
+        echo "VCPKG_ROOT=`pwd`" >> $GITHUB_ENV
+
+    - name: Configure
+      run: >
+        cmake -S vcpkg-cache-server -B build --preset ninja-developer
+        -DCMAKE_BUILD_TYPE=Debug
+        -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+
+    - name: "Run clang-tidy"
+      uses: cpp-linter/cpp-linter-action@v2.17.0
+      id: linter
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        repo-root: vcpkg-cache-server
+        database: ../build
+        style: 'file'
+        tidy-checks: ''
+        version: ${{ env.LLVM_PATH }}
+        tidy-review: true
+        format-review: false
+        step-summary: true
+        no-lgtm: false
+        lines-changed-only: true
+        thread-comments: update
+        file-annotations: false
+        verbosity: debug
+
+  release:
+    name: Create Release
+    if: github.event_name == 'push'
+    needs: build
+    runs-on: ubuntu-slim
+    permissions:
+      contents: write
+    steps:
+      - name: Download Artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: List Artifacts
+        run: ls -lR artifacts
+
+      - name: Create Latest Release
+        if: github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: Latest Build
+          body: |
+            Automated build from the latest commit on `main`.
+            Commit: ${{ github.sha }}
+          prerelease: true
+          # Don't mark as GitHub's "Latest Release" — that should be reserved for versioned releases
+          make_latest: false
+          files: artifacts/*
+
+      - name: Create Version Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          generate_release_notes: true
+          files: artifacts/*
+
+
+
+
