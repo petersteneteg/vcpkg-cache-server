@@ -59,15 +59,6 @@ void logRequest(std::shared_ptr<spdlog::logger> log, spdlog::level::level_enum l
         log->log(lvl, "{:>20}: {}", "text length", file.content.size());
     }
 }
-
-auto logger(std::shared_ptr<spdlog::logger> log) {
-    return [log](const httplib::Request& req, const httplib::Response& res) {
-        log->debug("{:5} {:15} Status: {:4} Vers: {:8} Path: {}", req.method, req.remote_addr,
-                   res.status, req.version, req.path);
-        logRequest(log, spdlog::level::trace, req);
-    };
-}
-
 httplib::Server::HandlerWithContentReader authorizeRequest(
     const Authorization& auth, httplib::Server::HandlerWithContentReader handler) {
     return [handler, &auth](const httplib::Request& req, httplib::Response& res,
@@ -327,7 +318,31 @@ int main(int argc, char* argv[]) {
     }};
 
     auto server = createServer(settings.certAndKey);
-    server->set_logger(logger(log));
+    server
+        ->set_logger([log](const httplib::Request& req, const httplib::Response& res) {
+            log->debug("{:5} {:15} Status: {:4} Vers: {:8} Path: {}", req.method, req.remote_addr,
+                       res.status, req.version, req.path);
+            logRequest(log, spdlog::level::trace, req);
+        })
+        .set_error_logger([log](const httplib::Error& error, const httplib::Request* req) {
+            log->error("Error happened: {}", to_string(error));
+            if (req) {
+                logRequest(log, spdlog::level::err, *req);
+            }
+        })
+        .set_error_handler([](const httplib::Request&, httplib::Response& res) {
+            res.set_content(
+                fmt::format("<p>Error Status: <span style='color:red;'>{}</span></p>", res.status),
+                "text/html");
+        })
+        .set_exception_handler(
+            [&](const httplib::Request& req, httplib::Response& res, std::exception_ptr ep) {
+                const auto error = fp::exceptionToString(ep);
+                log->error(error);
+                logRequest(log, spdlog::level::err, req);
+                res.set_content(fmt::format("<h1>Error 500</h1><p>{}</p>", error), "text/html");
+                res.status = httplib::StatusCode::InternalServerError_500;
+            });
 
     server->Get(
         R"(/cache/([0-9a-f]{64}))", [&](const httplib::Request& req, httplib::Response& res) {
@@ -486,27 +501,6 @@ int main(int argc, char* argv[]) {
             res.set_content(script->second, script->first);
         } else {
             res.status = httplib::StatusCode::NotFound_404;
-        }
-    });
-
-    server->set_error_handler([](const httplib::Request&, httplib::Response& res) {
-        res.set_content(
-            fmt::format("<p>Error Status: <span style='color:red;'>{}</span></p>", res.status),
-            "text/html");
-    });
-    server->set_exception_handler(
-        [&](const httplib::Request& req, httplib::Response& res, std::exception_ptr ep) {
-            const auto error = fp::exceptionToString(ep);
-            log->error(error);
-            logRequest(log, spdlog::level::err, req);
-            res.set_content(fmt::format("<h1>Error 500</h1><p>{}</p>", error), "text/html");
-            res.status = httplib::StatusCode::InternalServerError_500;
-        });
-    server->set_error_logger([&](const httplib::Error& error, const httplib::Request* req) {
-        log->error("Error happened: {}", to_string(error));
-
-        if (req) {
-            logRequest(log, spdlog::level::err, *req);
         }
     });
 
