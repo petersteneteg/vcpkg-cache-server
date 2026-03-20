@@ -72,10 +72,12 @@ jobs:
           echo "VCPKG_ROOT=`pwd`" >> $GITHUB_ENV
     
       - name: Configure
-        run: cmake -S vcpkg-cache-server -B build --preset ${{ matrix.preset }} -DCMAKE_BUILD_TYPE=${{ matrix.configuration }}
+        run: >
+          cmake -S vcpkg-cache-server -B build --preset ${{ matrix.preset }}
+                -DCMAKE_BUILD_TYPE=${{ matrix.configuration }}
 
       - name: Build
-        run: cmake --build build --parallel
+        run: cmake --build build --config ${{ matrix.configuration }} --parallel
 
       - name: Test
         run: ctest -C ${{ matrix.configuration }} --test-dir build --output-on-failure
@@ -103,10 +105,13 @@ jobs:
     - name: "Setup Clang"
       shell: bash
       run: |
-        sudo apt install --fix-missing clang-21 clang-tidy-21 clang-format-21 libc++-21-dev
-        echo "LLVM_PATH=/usr/lib/llvm-21/bin"   >> $GITHUB_ENV
-        echo "CC=/usr/lib/llvm-21/bin/clang"    >> $GITHUB_ENV
-        echo "CXX=/usr/lib/llvm-21/bin/clang++" >> $GITHUB_ENV
+        wget https://apt.llvm.org/llvm.sh
+        chmod +x llvm.sh
+        sudo ./llvm.sh 21
+
+        echo "CC=clang-21" >> $GITHUB_ENV
+        echo "CXX=clang++-21" >> $GITHUB_ENV
+        echo "LLVM_PATH=$(llvm-config-21 --bindir)" >> $GITHUB_ENV
 
     - name: "Clone Vcpkg Cache Server"
       uses: actions/checkout@v6
