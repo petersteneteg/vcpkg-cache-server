@@ -17,20 +17,22 @@ env:
 
 jobs:
   build:
-    name: ${{ matrix.name }}
-    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-          system: [macos, linux]
-          configuration: [Release, Debug]
+        system: [Linux, Macos]
+        configuration: [Release, Debug]
+
         include:
-          - system: linux
+          - system: Linux
             os: ubuntu-latest
             preset: ninja-developer
-          - system: macos
+          - system: Macos
             os: macos-latest
             preset: xcode-developer-arm64
+
+    name: "Build ${{ matrix.system }} ${{ matrix.configuration }}"
+    runs-on: ${{ matrix.os }}
 
     steps:
       - name: Install GCC 15
@@ -70,16 +72,16 @@ jobs:
           echo "VCPKG_ROOT=`pwd`" >> $GITHUB_ENV
     
       - name: Configure
-        run: cmake -S vcpkg-cache-server --preset ${{ matrix.preset }} -DCMAKE_BUILD_TYPE=${{ matrix.configuration }}
+        run: cmake -S vcpkg-cache-server -B build --preset ${{ matrix.preset }} -DCMAKE_BUILD_TYPE=${{ matrix.configuration }}
 
       - name: Build
-        run: cmake --build builds/vcpkg-cache-server-${{ matrix.preset }} --parallel
+        run: cmake --build build --parallel
 
       - name: Test
-        run: ctest -C ${{ matrix.configuration }} --test-dir builds/vcpkg-cache-server-${{ matrix.preset }} --output-on-failure
+        run: ctest -C ${{ matrix.configuration }} --test-dir build --output-on-failure
 
       - name: Package
-        working-directory: builds/vcpkg-cache-server-${{ matrix.preset }}
+        working-directory: build
         run: cpack -C ${{ matrix.configuration }}
 
       - name: Upload Artifact
@@ -87,7 +89,76 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: package-${{ matrix.preset }}
-          path: builds/vcpkg-cache-server-${{ matrix.preset }}/vcpkg-cache-server-*.tar.gz
+          path: build/vcpkg-cache-server-*.tar.gz
+
+  clang-tidy:
+    name: "Clang-tidy"
+    if: github.event_name == 'pull_request'
+    permissions:
+      pull-requests: write
+    runs-on: ubuntu-24.04
+    timeout-minutes: 320
+    steps:
+
+    - name: "Setup Clang"
+      shell: bash
+      run: |
+        sudo apt install --fix-missing clang-21 clang-tidy-21 clang-format-21 libc++-21-dev
+        echo "LLVM_PATH=/usr/lib/llvm-21/bin"   >> $GITHUB_ENV
+        echo "CC=/usr/lib/llvm-21/bin/clang"    >> $GITHUB_ENV
+        echo "CXX=/usr/lib/llvm-21/bin/clang++" >> $GITHUB_ENV
+
+    - name: "Clone Vcpkg Cache Server"
+      uses: actions/checkout@v6
+      with:
+        path: vcpkg-cache-server
+
+    - name: "Get Vcpkg SHA"
+      shell: bash
+      run: |
+        SHA=`jq -r '.["vcpkg-configuration"].["default-registry"].baseline' vcpkg-cache-server/vcpkg.json`
+        echo "VCPKG_SHA=${SHA}" >> $GITHUB_ENV
+    - name: "Clone Vcpkg"
+      uses: actions/checkout@v6
+      with:
+        repository: microsoft/vcpkg
+        ref: ${{ env.VCPKG_SHA }}
+        fetch-depth: 0
+        path: vcpkg
+    - name: "VCPKG Update"
+      shell: bash
+      run: |
+        cd vcpkg
+        ./bootstrap-vcpkg.sh
+        echo "VCPKG_INSTALLATION_ROOT=`pwd`" >> $GITHUB_ENV
+        echo "VCPKG_ROOT=`pwd`" >> $GITHUB_ENV
+
+    - name: Configure
+      run: >
+        cmake -S vcpkg-cache-server -B build --preset ninja-developer
+        -DCMAKE_BUILD_TYPE=Debug
+        -DCMAKE_CXX_FLAGS='-stdlib=libc++'
+        -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+
+    - name: "Run clang-tidy"
+      uses: cpp-linter/cpp-linter-action@v2.17.0
+      id: linter
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        repo-root: vcpkg-cache-server
+        database: ../build
+        style: 'file'
+        tidy-checks: ''
+        version: ${{ env.LLVM_PATH }}
+        tidy-review: true
+        format-review: false
+        step-summary: true
+        no-lgtm: false
+        lines-changed-only: true
+        thread-comments: update
+        file-annotations: false
+        verbosity: debug
 
   release:
     name: Create Release
@@ -127,3 +198,7 @@ jobs:
           name: ${{ github.ref_name }}
           generate_release_notes: true
           files: artifacts/*
+
+
+
+
