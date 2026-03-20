@@ -2,9 +2,12 @@ name: CI
 
 on:
   push:
-    branches: [main]
-    tags: ["v*"]
+    branches:
+      - main
+    tags:
+      - "v*"
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -19,11 +22,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+          system: [macos, linux]
+          configuration: [Release, Debug]
         include:
-          - name: Linux (GCC)
+          - system: linux
             os: ubuntu-latest
             preset: ninja-developer
-          - name: macOS (Xcode)
+          - system: macos
             os: macos-latest
             preset: xcode-developer-arm64
 
@@ -65,21 +70,21 @@ jobs:
           echo "VCPKG_ROOT=`pwd`" >> $GITHUB_ENV
     
       - name: Configure
-        run: cmake -S vcpkg-cache-server --preset ${{ matrix.preset }}
+        run: cmake -S vcpkg-cache-server --preset ${{ matrix.preset }} -DCMAKE_BUILD_TYPE=${{ matrix.configuration }}
 
       - name: Build
         run: cmake --build builds/vcpkg-cache-server-${{ matrix.preset }} --parallel
 
       - name: Test
-        run: ctest --test-dir builds/vcpkg-cache-server-${{ matrix.preset }} --output-on-failure
+        run: ctest -C ${{ matrix.configuration }} --test-dir builds/vcpkg-cache-server-${{ matrix.preset }} --output-on-failure
 
       - name: Package
         working-directory: builds/vcpkg-cache-server-${{ matrix.preset }}
-        run: cpack -C RelWithDebInfo
+        run: cpack -C ${{ matrix.configuration }}
 
       - name: Upload Artifact
-        if: github.event_name == 'push'
-        uses: actions/upload-artifact@v4
+        if: matrix.configuration == 'Release'
+        uses: actions/upload-artifact@v7
         with:
           name: package-${{ matrix.preset }}
           path: builds/vcpkg-cache-server-${{ matrix.preset }}/vcpkg-cache-server-*.tar.gz
@@ -88,12 +93,12 @@ jobs:
     name: Create Release
     if: github.event_name == 'push'
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-slim
     permissions:
       contents: write
     steps:
       - name: Download Artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: artifacts
           merge-multiple: true

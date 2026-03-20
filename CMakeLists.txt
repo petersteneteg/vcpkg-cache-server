@@ -134,4 +134,9 @@ if(VCACHE_BUILD_TESTS)
         Catch2::Catch2WithMain
     )
     catch_discover_tests(vcpkg-cache-server-tests DISCOVERY_MODE PRE_TEST)
+
+    add_test(
+        NAME run-server
+        COMMAND vcpkg-cache-server --help
+    )
 endif()
