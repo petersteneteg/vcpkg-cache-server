@@ -74,7 +74,7 @@ jobs:
       - name: Configure
         run: >
           cmake -S vcpkg-cache-server -B build --preset ${{ matrix.preset }}
-                -DCMAKE_BUILD_TYPE=${{ matrix.configuration }}
+          -DCMAKE_BUILD_TYPE=${{ matrix.configuration }}
 
       - name: Build
         run: cmake --build build --config ${{ matrix.configuration }} --parallel
@@ -107,10 +107,12 @@ jobs:
       run: |
         wget https://apt.llvm.org/llvm.sh
         chmod +x llvm.sh
-        sudo ./llvm.sh 21
+        sudo ./llvm.sh 21 all
 
         echo "CC=clang-21" >> $GITHUB_ENV
         echo "CXX=clang++-21" >> $GITHUB_ENV
+        echo "CXXFLAGS=-stdlib=libc++" >> $GITHUB_ENV
+        echo "LDFLAGS=-stdlib=libc++" >> $GITHUB_ENV
         echo "LLVM_PATH=$(llvm-config-21 --bindir)" >> $GITHUB_ENV
 
     - name: "Clone Vcpkg Cache Server"
@@ -142,7 +144,6 @@ jobs:
       run: >
         cmake -S vcpkg-cache-server -B build --preset ninja-developer
         -DCMAKE_BUILD_TYPE=Debug
-        -DCMAKE_CXX_FLAGS='-stdlib=libc++'
         -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
     - name: "Run clang-tidy"
