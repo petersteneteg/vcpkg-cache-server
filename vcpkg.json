@@ -6,7 +6,7 @@
   "vcpkg-configuration": {
     "default-registry": {
       "kind": "builtin",
-      "baseline": "dfb72f61c5a066ab75cd0bdcb2e007228bfc3270"
+      "baseline": "eed289f6e06a5e7a5c9e6a729671b0a56af7dd69"
     }
   },
   "dependencies": [
