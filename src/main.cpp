@@ -318,6 +318,21 @@ int main(int argc, char* argv[]) {
     }};
 
     auto server = createServer(settings.certAndKey);
+
+    if (settings.threadPool.baseThreads || settings.threadPool.maxThreads ||
+        settings.threadPool.maxQueuedRequests) {
+        const auto baseThreads = settings.threadPool.baseThreads.value_or(
+            CPPHTTPLIB_THREAD_POOL_COUNT);
+        const auto maxThreads = settings.threadPool.maxThreads.value_or(
+            CPPHTTPLIB_THREAD_POOL_MAX_COUNT);
+        const auto maxQueuedRequests = settings.threadPool.maxQueuedRequests.value_or(0);
+        log->info("Thread pool: base_threads={}, max_threads={}, max_queued_requests={}",
+                  baseThreads, maxThreads, maxQueuedRequests);
+        server->new_task_queue = [=] {
+            return new httplib::ThreadPool(baseThreads, maxThreads, maxQueuedRequests);
+        };
+    }
+
     server
         ->set_logger([log](const httplib::Request& req, const httplib::Response& res) {
             log->debug("{:5} {:15} Status: {:4} Vers: {:8} Path: {}", req.method, req.remote_addr,

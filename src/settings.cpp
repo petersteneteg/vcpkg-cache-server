@@ -183,6 +183,32 @@ std::string generateConfigYaml(const Settings& settings) {
     } else {
         out += "  # max_unused: 30d\n";
     }
+    out += "\n";
+
+    // thread_pool
+    out += "# Thread pool settings for the HTTP server\n";
+    out += "thread_pool:\n";
+    out += "\n";
+    out += "  # Number of base (permanent) worker threads\n";
+    if (settings.threadPool.baseThreads) {
+        out += fmt::format("  base_threads: {}\n", *settings.threadPool.baseThreads);
+    } else {
+        out += "  # base_threads: 12\n";
+    }
+    out += "\n";
+    out += "  # Maximum number of dynamic worker threads (0 = unlimited)\n";
+    if (settings.threadPool.maxThreads) {
+        out += fmt::format("  max_threads: {}\n", *settings.threadPool.maxThreads);
+    } else {
+        out += "  # max_threads: 0\n";
+    }
+    out += "\n";
+    out += "  # Maximum number of queued requests (0 = unlimited)\n";
+    if (settings.threadPool.maxQueuedRequests) {
+        out += fmt::format("  max_queued_requests: {}\n", *settings.threadPool.maxQueuedRequests);
+    } else {
+        out += "  # max_queued_requests: 18\n";
+    }
 
     return out;
 }
@@ -252,6 +278,20 @@ void parseConfig(const std::filesystem::path& configFile, Settings& settings) {
 
         if (maintenance["dry_run"]) {
             settings.maintenance.dryrun = maintenance["dry_run"].as<bool>();
+        }
+    }
+
+    if (config["thread_pool"]) {
+        const auto threadPool = config["thread_pool"];
+        if (threadPool["base_threads"]) {
+            settings.threadPool.baseThreads = threadPool["base_threads"].as<size_t>();
+        }
+        if (threadPool["max_threads"]) {
+            settings.threadPool.maxThreads = threadPool["max_threads"].as<size_t>();
+        }
+        if (threadPool["max_queued_requests"]) {
+            settings.threadPool.maxQueuedRequests =
+                threadPool["max_queued_requests"].as<size_t>();
         }
     }
 }
