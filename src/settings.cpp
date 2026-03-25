@@ -90,8 +90,7 @@ std::string generateConfigYaml(const Settings& settings) {
     out += "\n";
 
     // verbosity
-    out +=
-        "# Log verbosity level: 0=trace, 1=debug, 2=info, 3=warn, 4=error, 5=critical, 6=off\n";
+    out += "# Log verbosity level: 0=trace, 1=debug, 2=info, 3=warn, 4=error, 5=critical, 6=off\n";
     out += fmt::format("verbosity: {}\n", static_cast<int>(settings.logLevel));
     out += "\n";
 
@@ -193,21 +192,21 @@ std::string generateConfigYaml(const Settings& settings) {
     if (settings.threadPool.baseThreads) {
         out += fmt::format("  base_threads: {}\n", *settings.threadPool.baseThreads);
     } else {
-        out += "  # base_threads: 12\n";
+        out += "  # base_threads: 8\n";
     }
     out += "\n";
-    out += "  # Maximum number of dynamic worker threads (0 = unlimited)\n";
+    out += "  # Maximum number of dynamic worker threads, default 4 x base_threads\n";
     if (settings.threadPool.maxThreads) {
         out += fmt::format("  max_threads: {}\n", *settings.threadPool.maxThreads);
     } else {
-        out += "  # max_threads: 0\n";
+        out += "  # max_threads: 32\n";
     }
     out += "\n";
     out += "  # Maximum number of queued requests (0 = unlimited)\n";
     if (settings.threadPool.maxQueuedRequests) {
         out += fmt::format("  max_queued_requests: {}\n", *settings.threadPool.maxQueuedRequests);
     } else {
-        out += "  # max_queued_requests: 18\n";
+        out += "  # max_queued_requests: 0\n";
     }
 
     return out;
@@ -290,8 +289,7 @@ void parseConfig(const std::filesystem::path& configFile, Settings& settings) {
             settings.threadPool.maxThreads = threadPool["max_threads"].as<size_t>();
         }
         if (threadPool["max_queued_requests"]) {
-            settings.threadPool.maxQueuedRequests =
-                threadPool["max_queued_requests"].as<size_t>();
+            settings.threadPool.maxQueuedRequests = threadPool["max_queued_requests"].as<size_t>();
         }
     }
 }

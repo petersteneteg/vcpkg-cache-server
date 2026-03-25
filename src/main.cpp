@@ -3,6 +3,8 @@
 #include <vcpkg-cache-server/site.hpp>
 #include <vcpkg-cache-server/functional.hpp>
 #include <vcpkg-cache-server/database.hpp>
+#include <vcpkg-cache-server/maintenance.hpp>
+#include <vcpkg-cache-server/logging.hpp>
 
 #include <httplib.h>
 
@@ -31,32 +33,31 @@
 
 namespace vcache {
 
-void logRequest(std::shared_ptr<spdlog::logger> log, spdlog::level::level_enum lvl,
+void logRequest(spdlog::logger& logger, spdlog::level::level_enum lvl,
                 const httplib::Request& req) {
-
-    log->log(lvl, "{:>20}: {}", "method", req.method);
-    log->log(lvl, "{:>20}: {}", "path", req.path);
-    log->log(lvl, "{:>20}: {}", "matched_route", req.matched_route);
-    log->log(lvl, "{:>20}: {}", "remote_addr", req.remote_addr);
-    log->log(lvl, "{:>20}: {}", "local_addr", req.local_addr);
+    log::report(logger, lvl, "{:>20}: {}", "method", req.method);
+    log::report(logger, lvl, "{:>20}: {}", "path", req.path);
+    log::report(logger, lvl, "{:>20}: {}", "matched_route", req.matched_route);
+    log::report(logger, lvl, "{:>20}: {}", "remote_addr", req.remote_addr);
+    log::report(logger, lvl, "{:>20}: {}", "local_addr", req.local_addr);
 
     for (const auto& [key, val] : req.params) {
-        log->log(lvl, "{:>20}: {}", key, val);
+        log::report(logger, lvl, "{:>20}: {}", key, val);
     }
     for (const auto& [key, val] : req.headers) {
-        log->log(lvl, "{:>20}: {}", key, val);
+        log::report(logger, lvl, "{:>20}: {}", key, val);
     }
     for (const auto& [key, val] : req.trailers) {
-        log->log(lvl, "{:>20}: {}", key, val);
+        log::report(logger, lvl, "{:>20}: {}", key, val);
     }
     for (const auto& [key, val] : req.path_params) {
-        log->log(lvl, "{:>20}: {}", key, val);
+        log::report(logger, lvl, "{:>20}: {}", key, val);
     }
     for (const auto& [name, file] : req.form.files) {
-        log->log(lvl, "{:>20}: {}", "name", name);
-        log->log(lvl, "{:>20}: {}", "filename", file.filename);
-        log->log(lvl, "{:>20}: {}", "content type", file.content_type);
-        log->log(lvl, "{:>20}: {}", "text length", file.content.size());
+        log::report(logger, lvl, "{:>20}: {}", "name", name);
+        log::report(logger, lvl, "{:>20}: {}", "filename", file.filename);
+        log::report(logger, lvl, "{:>20}: {}", "content type", file.content_type);
+        log::report(logger, lvl, "{:>20}: {}", "text length", file.content.size());
     }
 }
 httplib::Server::HandlerWithContentReader authorizeRequest(
@@ -84,7 +85,7 @@ httplib::Server::HandlerWithContentReader authorizeRequest(
 
 std::shared_ptr<spdlog::logger> createLog(spdlog::level::level_enum logLevel,
                                           const std::optional<std::filesystem::path>& logFile) {
-    auto log = [&]() {
+    auto logger = [&]() {
         if (logFile) {
             auto consoleSink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
             auto fileSink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(
@@ -96,10 +97,10 @@ std::shared_ptr<spdlog::logger> createLog(spdlog::level::level_enum logLevel,
         }
     }();
 
-    log->set_level(logLevel);
-    log->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%P/%t] %8l: %v");
-    log->info("logLevel is set to {}", to_string_view(logLevel));
-    return log;
+    logger->set_level(logLevel);
+    logger->set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%P/%t] [%15s:%4#] [%8l]: %v");
+    log::info(*logger, "logLevel is set to {}", to_string_view(logLevel));
+    return logger;
 }
 
 std::unique_ptr<httplib::Server> createServer(
@@ -123,158 +124,14 @@ std::pair<std::string, std::string> requestUserToken(const httplib::Request& req
     return {user, std::string{token}};
 }
 
-std::string logCache(const httplib::Request& req, const Info& info, const Authorization& auth) {
+void logCache(spdlog::logger& logger, const httplib::Request& req, const Info& info,
+              const Authorization& auth) {
     const auto [user, token] = requestUserToken(req, auth);
-
-    return fmt::format(
-        "{:5} {:15} {:30} v{:<11} {:15} Size: {:10} Created: {:%Y-%m-%d %H:%M} "
-        "Sha: {} Auth {} User {}",
-        req.method, fp::mGet(req.headers, "REMOTE_ADDR").value_or("?.?.?.?"), info.package,
-        info.version, info.arch, ByteSize{info.size}, info.time, info.sha, token, user);
-}
-
-size_t removeCache(const db::Cache& cache, db::Database& db, std::vector<std::string>& toDelete,
-                   std::shared_ptr<spdlog::logger> log) {
-    using namespace sqlite_orm;
-
-    log->info(
-        "[Maintain]    Removing cache: {} used: {:%Y-%m-%d %H:%M} "
-        "created: {:%Y-%m-%d %H:%M} size: {:>10}",
-        cache.sha, Time{Duration{cache.lastUsed}}, Time{Duration{cache.created}},
-        ByteSize{cache.size});
-
-    db.update_all(set(c(&db::Cache::deleted) = true), where(c(&db::Cache::id) == cache.id));
-
-    toDelete.push_back(cache.sha);
-
-    return cache.size;
-}
-
-void maintain(Store& store, db::Database& db, const Maintenance& maintenance,
-              std::shared_ptr<spdlog::logger> log, Time now) {
-
-    std::vector<std::string> toDelete;
-
-    db.begin_transaction();
-
-    size_t allRemoved{};
-
-    log->info("[Maintain] Running Maintenance");
-
-    allRemoved += maintenance.maxAge
-                      .and_then([&](Duration maxAge) -> std::optional<size_t> {
-                          using namespace sqlite_orm;
-                          const auto cutoff = now - maxAge;
-
-                          log->info("[Maintain] Looking for packages created before: {} ({})",
-                                    cutoff, FormatDuration{maxAge});
-                          size_t removed{};
-                          for (auto& cache : db.iterate<db::Cache>(where(and_(
-                                   c(&db::Cache::deleted) == false,
-                                   c(&db::Cache::created) < cutoff.time_since_epoch().count())))) {
-
-                              removed += removeCache(cache, db, toDelete, log);
-                          }
-                          return removed;
-                      })
-                      .value_or(size_t{0});
-
-    allRemoved += maintenance.maxUnused
-                      .and_then([&](Duration maxUnused) -> std::optional<size_t> {
-                          using namespace sqlite_orm;
-                          const auto cutoff = now - maxUnused;
-
-                          log->info("[Maintain] Looking for packages not used after: {} ({})",
-                                    cutoff, FormatDuration{maxUnused});
-                          size_t removed{};
-                          for (auto& cache : db.iterate<db::Cache>(where(and_(
-                                   c(&db::Cache::deleted) == false,
-                                   c(&db::Cache::lastUsed) < cutoff.time_since_epoch().count())))) {
-
-                              removed += removeCache(cache, db, toDelete, log);
-                          }
-                          return removed;
-                      })
-                      .value_or(size_t{0});
-
-    allRemoved +=
-        maintenance.maxPackageSize
-            .and_then([&](ByteSize max) -> std::optional<size_t> {
-                using namespace sqlite_orm;
-                const auto sizes = db.select(
-                    columns(as<colalias_a>(total(&db::Cache::size)), &db::Package::name,
-                            &db::Package::id),
-                    inner_join<db::Package>(on(and_(c(&db::Cache::package) == &db::Package::id,
-                                                    c(&db::Cache::deleted) == false))),
-                    group_by(&db::Cache::package)
-                        .having(greater_than(get<colalias_a>(), std::to_underlying(max))));
-
-                size_t totalRemoved{};
-                for (const auto& [size, name, pid] : sizes) {
-                    log->info("[Maintain] Package: {:20} size {:>10} exceeds given max size {:>10}",
-                              name, ByteSize{static_cast<size_t>(size)}, max);
-
-                    const auto overflow = size - std::to_underlying(max);
-                    size_t removed{};
-                    for (auto& cache :
-                         db.iterate<db::Cache>(where(and_(c(&db::Cache::package) == pid,
-                                                          c(&db::Cache::deleted) == false)),
-                                               multi_order_by(order_by(&db::Cache::lastUsed),
-                                                              order_by(&db::Cache::created)))) {
-                        removed += removeCache(cache, db, toDelete, log);
-                        if (removed > overflow) break;
-                    }
-                    totalRemoved += removed;
-                }
-                return totalRemoved;
-            })
-            .value_or(size_t{0});
-
-    allRemoved += maintenance.maxTotalSize
-                      .and_then([&](ByteSize max) -> std::optional<size_t> {
-                          using namespace sqlite_orm;
-                          const auto totalSize =
-                              db.total(&db::Cache::size, where(c(&db::Cache::deleted) == false));
-
-                          if (totalSize > std::to_underlying(max)) {
-                              const auto overflow = totalSize - std::to_underlying(max);
-                              log->info("[Maintain] Total Cache size {} exceeds given max {} by {}",
-                                        ByteSize{static_cast<size_t>(totalSize)}, ByteSize{max},
-                                        ByteSize(overflow));
-                              return overflow;
-                          } else {
-                              return std::nullopt;
-                          }
-                      })
-                      .and_then([&](size_t overflow) -> std::optional<size_t> {
-                          using namespace sqlite_orm;
-
-                          size_t removed{};
-                          for (auto& cache : db.iterate<db::Cache>(
-                                   where(c(&db::Cache::deleted) == false),
-                                   multi_order_by(order_by(&db::Cache::lastUsed),
-                                                  order_by(&db::Cache::created)))) {
-                              removed += removeCache(cache, db, toDelete, log);
-                              if (removed > overflow) break;
-                          }
-                          return removed;
-                      })
-                      .value_or(size_t{0});
-
-    if (allRemoved > 0) {
-        log->info("[Maintain] Remove a total of {}", ByteSize{allRemoved});
-    }
-
-    if (maintenance.dryrun) {
-        db.rollback();
-        log->info("[Maintain] changes discarded, dry run mode");
-    } else {
-        db.commit();
-        for (const auto& sha : toDelete) {
-            store.remove(sha);
-        }
-    }
-    log->info("[Maintain] Maintenance finished");
+    log::info(logger,
+              "{:5} {:15} {:30} v{:<11} {:15} Size: {:10} Created: {:%Y-%m-%d %H:%M} "
+              "Sha: {} Auth {} User {}",
+              req.method, req.remote_addr, info.package, info.version, info.arch,
+              ByteSize{info.size}, info.time, info.sha, token, user);
 }
 
 }  // namespace vcache
@@ -283,12 +140,12 @@ int main(int argc, char* argv[]) {
     using namespace vcache;
 
     const auto settings = parseArgs(argc, argv);
-    auto log = createLog(settings.logLevel, settings.logFile);
-    log->flush_on(spdlog::level::trace);
+    auto logger = createLog(settings.logLevel, settings.logFile);
+    logger->flush_on(spdlog::level::trace);
 
     auto db = db::create(settings.dbFile);
 
-    auto store = Store(settings.cacheDir, log);
+    auto store = Store(settings.cacheDir, logger);
 
     for (auto& item : store.allInfos()) {
         auto pid = db::getOrAddPackageId(db, item.package);
@@ -301,19 +158,19 @@ int main(int argc, char* argv[]) {
         });
     }
 
-    std::jthread maintenance{[log, &settings, &db, &store](std::stop_token token) {
+    std::jthread maintenance{[logger, &settings, &db, &store](std::stop_token token) {
         try {
             std::mutex mutex;
             while (!token.stop_requested()) {
-                maintain(store, db, settings.maintenance, log, Clock::now());
+                vcache::maintain(store, db, settings.maintenance, logger, Clock::now());
                 std::unique_lock lock(mutex);
                 std::condition_variable_any().wait_for(lock, token, std::chrono::hours{1},
                                                        [] { return false; });
             }
         } catch (const std::exception& e) {
-            log->error("maintenance failed with error {}", e.what());
+            log::error(*logger, "[Maintain] failed with error {}", e.what());
         } catch (...) {
-            log->error("maintenance failed unknown error");
+            log::error(*logger, "[Maintain] failed unknown error");
         }
     }};
 
@@ -321,12 +178,12 @@ int main(int argc, char* argv[]) {
 
     if (settings.threadPool.baseThreads || settings.threadPool.maxThreads ||
         settings.threadPool.maxQueuedRequests) {
-        const auto baseThreads = settings.threadPool.baseThreads.value_or(
-            CPPHTTPLIB_THREAD_POOL_COUNT);
-        const auto maxThreads = settings.threadPool.maxThreads.value_or(
-            CPPHTTPLIB_THREAD_POOL_MAX_COUNT);
+        const auto baseThreads = settings.threadPool.baseThreads.value_or(std::max(
+            8u,
+            std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() - 1 : 0));
+        const auto maxThreads = settings.threadPool.maxThreads.value_or(baseThreads * 4);
         const auto maxQueuedRequests = settings.threadPool.maxQueuedRequests.value_or(0);
-        log->info("Thread pool: base_threads={}, max_threads={}, max_queued_requests={}",
+        log::info(*logger, "Thread pool: base_threads={}, max_threads={}, max_queued_requests={}",
                   baseThreads, maxThreads, maxQueuedRequests);
         server->new_task_queue = [=] {
             return new httplib::ThreadPool(baseThreads, maxThreads, maxQueuedRequests);
@@ -334,15 +191,15 @@ int main(int argc, char* argv[]) {
     }
 
     server
-        ->set_logger([log](const httplib::Request& req, const httplib::Response& res) {
-            log->debug("{:5} {:15} Status: {:4} Vers: {:8} Path: {}", req.method, req.remote_addr,
-                       res.status, req.version, req.path);
-            logRequest(log, spdlog::level::trace, req);
+        ->set_logger([logger](const httplib::Request& req, const httplib::Response& res) {
+            log::debug(*logger, "{:5} {:15} Status: {:4} Vers: {:8} Path: {}", req.method,
+                       req.remote_addr, res.status, req.version, req.path);
+            logRequest(*logger, spdlog::level::trace, req);
         })
-        .set_error_logger([log](const httplib::Error& error, const httplib::Request* req) {
-            log->error("Error happened: {}", to_string(error));
+        .set_error_logger([logger](const httplib::Error& error, const httplib::Request* req) {
+            log::error(*logger, "Error happened: {}", to_string(error));
             if (req) {
-                logRequest(log, spdlog::level::err, *req);
+                logRequest(*logger, spdlog::level::err, *req);
             }
         })
         .set_error_handler([](const httplib::Request&, httplib::Response& res) {
@@ -353,8 +210,8 @@ int main(int argc, char* argv[]) {
         .set_exception_handler(
             [&](const httplib::Request& req, httplib::Response& res, std::exception_ptr ep) {
                 const auto error = fp::exceptionToString(ep);
-                log->error(error);
-                logRequest(log, spdlog::level::err, req);
+                log::error(*logger, "{}", error);
+                logRequest(*logger, spdlog::level::err, req);
                 res.set_content(fmt::format("<h1>Error 500</h1><p>{}</p>", error), "text/html");
                 res.status = httplib::StatusCode::InternalServerError_500;
             });
@@ -365,7 +222,7 @@ int main(int argc, char* argv[]) {
 
             if (auto reader = store.read(sha)) {
                 const auto& info = reader->getInfo();
-                log->info(logCache(req, info, settings.auth));
+                logCache(*logger, req, info, settings.auth);
 
                 const auto cid = *db::getCacheId(db, info.sha);
                 const auto now = Clock::now();
@@ -410,7 +267,7 @@ int main(int argc, char* argv[]) {
             }
 
             if (const auto* info = store.info(sha)) {
-                log->info(logCache(req, *info, settings.auth));
+                logCache(*logger, req, *info, settings.auth);
 
                 db::addCache(
                     db, db::Cache{.sha = info->sha,
@@ -421,7 +278,7 @@ int main(int argc, char* argv[]) {
                                   .size = info->size});
 
             } else {
-                log->warn("Expected to find a new package at {}", sha);
+                log::warn(*logger, "Expected to find a new package at {}", sha);
             }
         }));
 
@@ -519,15 +376,15 @@ int main(int argc, char* argv[]) {
         }
     });
 
-    log->info("Start server {}:{}", settings.host, settings.port);
+    log::info(*logger, "Start server {}:{}", settings.host, settings.port);
     try {
         if (!server->listen(settings.host, settings.port)) {
-            log->error("Server stop unexpectedly");
+            log::error(*logger, "Server stop unexpectedly");
         }
     } catch (const std::exception& e) {
-        log->error("Server failed with error {}", e.what());
+        log::error(*logger, "Server failed with error {}", e.what());
     } catch (...) {
-        log->error("Server failed unknown error");
+        log::error(*logger, "Server failed unknown error");
     }
-    log->info("Server shutdown");
+    log::info(*logger, "Server shutdown");
 }
