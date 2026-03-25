@@ -23,6 +23,12 @@ struct Maintenance {
     std::optional<Duration> maxUnused = std::nullopt;
 };
 
+struct ThreadPool {
+    std::optional<size_t> baseThreads = std::nullopt;
+    std::optional<size_t> maxThreads = std::nullopt;
+    std::optional<size_t> maxQueuedRequests = std::nullopt;
+};
+
 struct Settings {
     std::filesystem::path cacheDir{};
     std::filesystem::path dbFile;
@@ -35,6 +41,7 @@ struct Settings {
     std::optional<std::filesystem::path> logFile = std::nullopt;
 
     Maintenance maintenance;
+    ThreadPool threadPool;
 };
 
 Settings parseArgs(int argc, char* argv[]);

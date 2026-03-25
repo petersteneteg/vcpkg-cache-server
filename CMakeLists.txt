@@ -7,17 +7,21 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 add_library(vcpkg-cache-server-lib OBJECT)
 target_sources(vcpkg-cache-server-lib
     PUBLIC FILE_SET HEADERS TYPE HEADERS BASE_DIRS include FILES
-        include/vcpkg-cache-server/settings.hpp
-        include/vcpkg-cache-server/functional.hpp
-        include/vcpkg-cache-server/store.hpp
-        include/vcpkg-cache-server/site.hpp
         include/vcpkg-cache-server/database.hpp
+        include/vcpkg-cache-server/functional.hpp
+        include/vcpkg-cache-server/logging.hpp
+        include/vcpkg-cache-server/maintenance.hpp
+        include/vcpkg-cache-server/settings.hpp
+        include/vcpkg-cache-server/site.hpp
+        include/vcpkg-cache-server/store.hpp
     PRIVATE
         src/database.cpp
-        src/settings.cpp
         src/functional.cpp
-        src/store.cpp
+        src/logging.cpp
+        src/maintenance.cpp
+        src/settings.cpp
         src/site.cpp
+        src/store.cpp
 )
 
 file(DOWNLOAD https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css

@@ -1,4 +1,5 @@
 #include <vcpkg-cache-server/store.hpp>
+#include <vcpkg-cache-server/logging.hpp>
 
 #include <libzippp.h>
 
@@ -12,17 +13,17 @@
 namespace vcache {
 
 Store::Store(const std::filesystem::path& aRoot, std::shared_ptr<spdlog::logger> aLog)
-    : log{aLog}, root{aRoot}, infos{} {
+    : logger{aLog}, root{aRoot}, infos{} {
 
     if (!std::filesystem::exists(aRoot)) {
-        log->info("creating cache directory {}", aRoot);
+        log::info(*logger, "creating cache directory {}", aRoot);
         std::filesystem::create_directories(aRoot);
     }
 
-    log->info("Start scan");
-    infos = scan(root, log);
-    log->info("Scan finished");
-    log->info(statistics());
+    log::info(*logger, "Start scan");
+    infos = scan(root, logger);
+    log::info(*logger, "Scan finished");
+    log::info(*logger, "{}", statistics());
 }
 
 bool Store::exists(std::string_view sha) const {
@@ -112,22 +113,22 @@ void Store::remove(std::string_view sha) {
             it->second.first = InfoState::Deleted;
             const auto path = shaToPath(sha);
 
-            log->info("Deleting: {}", path);
+            log::info(*logger, "Deleting: {}", path);
             std::filesystem::remove(path);
         }
     }
 }
 
 fp::UnorderedStringMap<std::pair<InfoState, Info>> scan(const std::filesystem::path& path,
-                                                        std::shared_ptr<spdlog::logger> log) {
+                                                        std::shared_ptr<spdlog::logger> logger) {
     return std::filesystem::recursive_directory_iterator(path) | std::views::filter(fp::isZipFile) |
            fp::tryTransform(
                [&](const auto& entry) {
-                   log->trace("scan: {}", entry.path().stem().generic_string());
+                   log::trace(*logger, "scan: {}", entry.path().stem().generic_string());
                    return extractInfo(entry.path());
                },
                [&](const auto& entry) {
-                   log->error("error scaning {} : {}, removing entry", entry.path(),
+                   log::error(*logger, "error scaning {} : {}, removing entry", entry.path(),
                               fp::exceptionToString());
                    std::filesystem::remove(entry.path());
                }) |
@@ -198,7 +199,7 @@ StoreWriter::~StoreWriter() {
             infoItem.first = InfoState::Valid;
         }
     } catch (const std::exception& e) {
-        store.log->error("Unable to close writer of: {} due to: {}", path, e.what());
+        log::error(*store.logger, "Unable to close writer of: {} due to: {}", path, e.what());
     }
 }
 

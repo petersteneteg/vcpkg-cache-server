@@ -89,7 +89,7 @@ private:
      * We make sure to never remove any info items to prevent the need of synchronization.
      */
     mutable std::shared_mutex smtx;
-    std::shared_ptr<spdlog::logger> log;
+    std::shared_ptr<spdlog::logger> logger;
     std::filesystem::path root;
     fp::UnorderedStringMap<std::pair<InfoState, Info>> infos;
 };
