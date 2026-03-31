@@ -30,6 +30,9 @@
 #include <thread>
 #include <condition_variable>
 #include <chrono>
+#if !defined(_WIN32)
+#include <unistd.h>
+#endif
 
 namespace vcache {
 
@@ -319,6 +322,18 @@ int main(int argc, char* argv[]) {
     const auto search = [](const httplib::Request& req) -> std::string {
         return fp::mGet(req.params, "search").value_or(std::string{});
     };
+
+    server->Get("/status", [](const httplib::Request&, httplib::Response& res) {
+        const auto fds = fp::openFileDescriptors();
+        const auto fdsStr = fds ? fmt::format("{}", *fds) : "null";
+#if defined(_WIN32)
+        const auto pid = static_cast<long>(::GetCurrentProcessId());
+#else
+        const auto pid = static_cast<long>(::getpid());
+#endif
+        res.set_content(fmt::format(R"({{"pid":{},"open_fds":{}}})", pid, fdsStr),
+                        "application/json");
+    });
 
     server->Get("/match", [](const httplib::Request&, httplib::Response& res) {
         res.set_content(site::match(), "text/html");
