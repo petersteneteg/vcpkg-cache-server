@@ -71,6 +71,9 @@ std::string downloads(db::Database& db, Mode mode, std::optional<size_t> sortIdx
 std::string index(const Store& store, db::Database& db, Mode mode, Sort sort,
                   std::optional<Order> order, std::string_view search);
 
+std::string statusData();
+std::string status(Mode mode);
+
 namespace detail {
 
 std::string deliver(std::string_view content, Mode mode);

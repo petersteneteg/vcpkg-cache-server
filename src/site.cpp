@@ -938,6 +938,34 @@ std::string downloads(db::Database& db, Mode mode, std::optional<size_t> sortIdx
     return detail::deliver(content, mode);
 }
 
+std::string statusData() {
+    const auto fds = fp::openFileDescriptors();
+    const auto threads = fp::threadCount();
+    const auto mem = fp::memoryUsageBytes();
+    const auto pid = fp::processId();
+
+    static constexpr std::string_view html = R"(
+        <div hx-get="/status/data" hx-trigger="every 2s" hx-swap="outerHTML">
+            <dl>
+                <dt>PID:</dt><dd>{}</dd>
+                <dt>Open file descriptors:</dt><dd>{}</dd>
+                <dt>Threads:</dt><dd>{}</dd>
+                <dt>Peak memory (RSS):</dt><dd>{}</dd>
+            </dl>
+        </div>
+    )";
+
+    return fmt::format(html, pid, fds ? fmt::to_string(*fds) : "N/A",
+                       threads ? fmt::to_string(*threads) : "N/A",
+                       mem ? fmt::to_string(ByteSize{*mem}) : "N/A");
+}
+
+std::string status(Mode mode) {
+    const auto nav = detail::nav({{"Packages", "/"}, {"Status", "/status"}});
+    const auto content = fmt::format("<div>{}</div><h4>Process Status</h4>{}", nav, statusData());
+    return detail::deliver(content, mode);
+}
+
 std::string favicon() { return std::string{html::favicon}; }
 std::string maskicon() { return std::string{html::maskicon}; }
 

@@ -19,13 +19,6 @@
 
 #include <fast_float/fast_float.h>
 
-#if defined(__APPLE__) || defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__)
-#include <unistd.h>
-#elif defined(_WIN32)
-#define WIN32_LEAN_AND_MEAN
-#include <windows.h>
-#endif
-
 namespace vcache {
 
 using Time = std::filesystem::file_time_type;
@@ -203,27 +196,10 @@ inline std::pair<std::string_view, std::string_view> parseAuthHeader(
     return {scheme, token};
 }
 
-inline std::optional<size_t> openFileDescriptors() {
-#if defined(__linux__)
-    std::error_code ec;
-    size_t count = 0;
-    for ([[maybe_unused]] const auto& _ : std::filesystem::directory_iterator("/proc/self/fd", ec)) {
-        ++count;
-    }
-    // The directory_iterator opens one fd itself, so subtract it from the total.
-    return ec ? std::nullopt : std::optional<size_t>{count > 0 ? count - 1 : 0};
-#elif defined(__APPLE__) || defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__)
-    return static_cast<size_t>(::getdtablecount());
-#elif defined(_WIN32)
-    DWORD count = 0;
-    if (::GetProcessHandleCount(::GetCurrentProcess(), &count)) {
-        return static_cast<size_t>(count);
-    }
-    return std::nullopt;
-#else
-    return std::nullopt;
-#endif
-}
+std::optional<size_t> openFileDescriptors();
+std::optional<size_t> threadCount();
+std::optional<size_t> memoryUsageBytes();
+long processId();
 
 }  // namespace fp
 
