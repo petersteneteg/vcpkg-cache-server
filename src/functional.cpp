@@ -7,8 +7,10 @@
 #include <sys/resource.h>
 #include <unistd.h>
 #elif defined(__APPLE__)
+#include <libproc.h>
 #include <mach/mach_init.h>
 #include <mach/task.h>
+#include <mach/vm_map.h>
 #include <sys/resource.h>
 #include <unistd.h>
 #elif defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__)
@@ -33,7 +35,11 @@ std::optional<size_t> openFileDescriptors() {
     }
     // The directory_iterator opens one fd itself, so subtract it from the total.
     return ec ? std::nullopt : std::optional<size_t>{count > 0 ? count - 1 : 0};
-#elif defined(__APPLE__) || defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__)
+#elif defined(__APPLE__)
+    const int nbytes = ::proc_pidinfo(::getpid(), PROC_PIDLISTFDS, 0, nullptr, 0);
+    if (nbytes < 0) return std::nullopt;
+    return static_cast<size_t>(nbytes) / PROC_PIDLISTFD_SIZE;
+#elif defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__)
     return static_cast<size_t>(::getdtablecount());
 #elif defined(_WIN32)
     DWORD count = 0;
