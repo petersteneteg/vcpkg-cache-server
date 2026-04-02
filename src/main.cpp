@@ -320,6 +320,14 @@ int main(int argc, char* argv[]) {
         return fp::mGet(req.params, "search").value_or(std::string{});
     };
 
+    server->Get("/status", [&](const httplib::Request& req, httplib::Response& res) {
+        res.set_content(site::status(mode(req)), "text/html");
+    });
+
+    server->Get("/status/data", [](const httplib::Request&, httplib::Response& res) {
+        res.set_content(site::statusData(), "text/html");
+    });
+
     server->Get("/match", [](const httplib::Request&, httplib::Response& res) {
         res.set_content(site::match(), "text/html");
     });

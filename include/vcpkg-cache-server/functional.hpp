@@ -196,6 +196,11 @@ inline std::pair<std::string_view, std::string_view> parseAuthHeader(
     return {scheme, token};
 }
 
+std::optional<size_t> openFileDescriptors();
+std::optional<size_t> threadCount();
+std::optional<size_t> memoryUsageBytes();
+long processId();
+
 }  // namespace fp
 
 enum struct ByteSize : size_t {};
