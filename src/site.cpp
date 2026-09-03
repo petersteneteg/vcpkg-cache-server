@@ -375,7 +375,7 @@ std::string downloadsLink(Params params) {
     furl.params.insert_range(params);
 
     constexpr std::string_view str = R"(
-        <div class="d-inline-block float-end fs-4">
+        <div class="d-inline-block float-end fs-4 me-3">
             <a class="pointer link-underline 
                     link-offset-2-hover 
                     link-underline-opacity-0 
@@ -385,6 +385,28 @@ std::string downloadsLink(Params params) {
                 hx-swap="innerHTML" 
                 hx-push-url={}>
                     Downloads
+            </a>
+        </div>)";
+    return fmt::format(str, purl, furl);
+}
+
+std::string purgeLink(Params params) {
+    Url purl{.path = "/purge", .params = {{"mode", "plain"}}};
+    Url furl{.path = "/purge", .params = {{"mode", "full"}}};
+    purl.params.insert_range(params);
+    furl.params.insert_range(params);
+
+    constexpr std::string_view str = R"(
+        <div class="d-inline-block float-end fs-4 me-3">
+            <a class="pointer link-underline 
+                    link-offset-2-hover 
+                    link-underline-opacity-0 
+                    link-underline-opacity-75-hover" 
+                hx-get="{}" 
+                hx-target="#content" 
+                hx-swap="innerHTML" 
+                hx-push-url={}>
+                    Purge
             </a>
         </div>)";
     return fmt::format(str, purl, furl);
@@ -576,7 +598,177 @@ std::string index(const Store& store, db::Database& db, Mode mode, Sort sort,
             {5}
         </div>
     )";
-    const auto content = fmt::format(html, nav, downloadsLink({}), search, stats, headerRow, str);
+    const auto content = fmt::format(html, nav, fmt::format("{}{}", purgeLink({}), downloadsLink({})),
+                                     search, stats, headerRow, str);
+
+    return detail::deliver(content, mode);
+}
+
+namespace {
+
+std::string purgeRow(const Info& info) {
+    static constexpr std::string_view itemStr = R"(
+        <div class="row">
+            <div class="col">{0}</div>
+            <div class="col">{1}</div>
+            <div class="col">{2}</div>
+            <div class="col"><pre>{3}</pre></div>
+            <div class="col">{4}</div>
+            <div class="col">{5:%Y-%m-%d %H:%M}</div>
+        </div>
+    )";
+    return fmt::format(itemStr, info.package, info.version, info.arch, info.sha.substr(0, 15),
+                       ByteSize{info.size}, info.time);
+}
+
+constexpr std::string_view purgeTableHeader = R"(
+    <div class="row fw-bold">
+        <div class="col">Package</div>
+        <div class="col">Version</div>
+        <div class="col">Arch</div>
+        <div class="col">SHA</div>
+        <div class="col">Size</div>
+        <div class="col">Created</div>
+    </div>
+)";
+
+}  // namespace
+
+std::string purge(const PurgePattern& pattern, const Store& store, Limit limit, Mode mode) {
+    Url purgeUrl{.path = "/purge", .params = {}};
+    if (pattern.sha) purgeUrl.params["sha"] = *pattern.sha;
+    if (pattern.package) purgeUrl.params["package"] = *pattern.package;
+    if (pattern.version) purgeUrl.params["version"] = *pattern.version;
+    if (pattern.arch) purgeUrl.params["arch"] = *pattern.arch;
+
+    const auto isEmpty = vcache::empty(pattern);
+
+    size_t totalMatches = 0;
+    size_t totalSize = 0;
+    std::string previewSection;
+    std::string curlSection;
+
+    if (!isEmpty) {
+        auto matched = findMatches(store, pattern);
+        std::ranges::sort(matched, std::less<>{}, [](const Info& i) {
+            return std::tie(i.package, i.version, i.arch, i.sha);
+        });
+
+        totalMatches = matched.size();
+        totalSize = std::ranges::fold_left(matched | std::views::transform(&Info::size), size_t{0},
+                                           std::plus<>{});
+
+        if (totalMatches == 0) {
+            previewSection = "<p>No cache entries match this pattern.</p>";
+        } else {
+            const auto pageSize = limit.limit.value_or(size_t{50});
+            const auto offset = std::min(limit.offset.value_or(size_t{0}), matched.size());
+            const auto count = std::min(pageSize, matched.size() - offset);
+
+            const auto rows = matched | std::views::drop(offset) | std::views::take(count) |
+                              std::views::transform([](const Info& i) { return purgeRow(i); }) |
+                              std::views::join | std::ranges::to<std::string>();
+
+            std::string pager;
+            if (offset + count < matched.size()) {
+                auto nextUrl = purgeUrl;
+                nextUrl.params["mode"] = "plain";
+                nextUrl.params["offset"] = fmt::to_string(offset + count);
+                nextUrl.params["limit"] = fmt::to_string(pageSize);
+                pager = fmt::format(
+                    R"(<button class="btn btn-link" hx-get="{}" hx-target="#content" hx-swap="innerHTML">More…</button>)",
+                    nextUrl);
+            }
+
+            previewSection = fmt::format(
+                R"(<h5>{} matching entries, {} (showing {}-{})</h5><div class="container text-left align-middle">{}{}</div>{})",
+                totalMatches, ByteSize{totalSize}, offset + 1, offset + count, purgeTableHeader,
+                rows, pager);
+
+            curlSection = fmt::format(
+                R"(<h6>Equivalent curl command</h6><pre>curl -X POST -H "Authorization: Bearer &lt;TOKEN&gt;" "https://&lt;server&gt;{}"</pre>)",
+                purgeUrl);
+        }
+    } else {
+        previewSection =
+            "<p>Enter at least one pattern above to preview matching cache entries.</p>";
+    }
+
+    static constexpr std::string_view formHtml = R"(
+        <div class="row g-2">
+            <div class="col">
+                <input class="form-control" type="text" id="purge-sha" name="sha"
+                       value="{0}" placeholder="SHA pattern, e.g. abcd*"
+                       hx-get="/purge?mode=plain" hx-target="#content" hx-swap="innerHTML"
+                       hx-include="#purge-sha,#purge-package,#purge-version,#purge-arch"
+                       hx-trigger="input changed delay:500ms, keyup[key=='Enter']">
+            </div>
+            <div class="col">
+                <input class="form-control" type="text" id="purge-package" name="package"
+                       value="{1}" placeholder="Package pattern, e.g. zlib*"
+                       hx-get="/purge?mode=plain" hx-target="#content" hx-swap="innerHTML"
+                       hx-include="#purge-sha,#purge-package,#purge-version,#purge-arch"
+                       hx-trigger="input changed delay:500ms, keyup[key=='Enter']">
+            </div>
+            <div class="col">
+                <input class="form-control" type="text" id="purge-version" name="version"
+                       value="{2}" placeholder="Version pattern, e.g. 1.2.*"
+                       hx-get="/purge?mode=plain" hx-target="#content" hx-swap="innerHTML"
+                       hx-include="#purge-sha,#purge-package,#purge-version,#purge-arch"
+                       hx-trigger="input changed delay:500ms, keyup[key=='Enter']">
+            </div>
+            <div class="col">
+                <input class="form-control" type="text" id="purge-arch" name="arch"
+                       value="{3}" placeholder="Arch pattern, e.g. x64-linux"
+                       hx-get="/purge?mode=plain" hx-target="#content" hx-swap="innerHTML"
+                       hx-include="#purge-sha,#purge-package,#purge-version,#purge-arch"
+                       hx-trigger="input changed delay:500ms, keyup[key=='Enter']">
+            </div>
+        </div>
+        <div class="row g-2 mt-1">
+            <div class="col-4">
+                <input class="form-control" type="text" id="purge-token"
+                       placeholder="Bearer token, required to purge">
+            </div>
+            <div class="col-auto">
+                <button class="btn btn-danger"
+                        hx-post="{4}"
+                        hx-headers='js:{{"Authorization": "Bearer " + document.getElementById("purge-token").value}}'
+                        hx-confirm="Permanently delete all {5} matching cache entries?"
+                        hx-target="#content" hx-swap="innerHTML" {6}>
+                    Purge matches
+                </button>
+            </div>
+        </div>
+    )";
+
+    const auto disabledAttr = (isEmpty || totalMatches == 0) ? "disabled" : "";
+    const auto form = fmt::format(formHtml, pattern.sha.value_or(""), pattern.package.value_or(""),
+                                  pattern.version.value_or(""), pattern.arch.value_or(""), purgeUrl,
+                                  totalMatches, disabledAttr);
+
+    const auto nav = detail::nav({{"Packages", "/"}, {"Purge", "/purge"}});
+    const auto content = fmt::format(R"(<div>{}</div><h4>Purge Caches</h4>{}{}{})", nav, form,
+                                     previewSection, curlSection);
+
+    return detail::deliver(content, mode);
+}
+
+std::string purgeResult(const PurgeResult& result, Mode mode) {
+    const auto rows = result.removed |
+                      std::views::transform([](const Info& i) { return purgeRow(i); }) |
+                      std::views::join | std::ranges::to<std::string>();
+
+    const auto heading = result.dryrun
+                             ? fmt::format("Preview: {} entries ({}) would be purged",
+                                           result.removed.size(), ByteSize{result.totalSize})
+                             : fmt::format("Purged {} entries, freed {}", result.removed.size(),
+                                           ByteSize{result.totalSize});
+
+    const auto nav = detail::nav({{"Packages", "/"}, {"Purge", "/purge"}});
+    const auto content = fmt::format(
+        R"(<div>{}</div><h4>{}</h4><div class="container text-left align-middle">{}{}</div>)", nav,
+        heading, purgeTableHeader, rows);
 
     return detail::deliver(content, mode);
 }
@@ -776,10 +968,11 @@ std::string find(std::string_view package, const Store& store, db::Database& db,
     const auto nav =
         detail::nav({{"Packages", "/"}, {std::string{package}, fmt::format("/find/{}", package)}});
     const auto content =
-        fmt::format(R"(<div>{}{}</div><h4>Count: {}, Total Size: {}</h4>)"
+        fmt::format(R"(<div>{}{}{}</div><h4>Count: {}, Total Size: {}</h4>)"
                     R"(<div class="container text-left align-middle">{}{}</div>)",
-                    nav, downloadsLink({{"selcol", "name"}, {"selval", std::string{package}}}),
-                    count, ByteSize{diskSize}, headerRow, str);
+                    nav, purgeLink({{"package", std::string{package}}}),
+                    downloadsLink({{"selcol", "name"}, {"selval", std::string{package}}}), count,
+                    ByteSize{diskSize}, headerRow, str);
 
     return detail::deliver(content, mode);
 }
@@ -797,7 +990,7 @@ std::string sha(std::string_view sha, const Store& store, Mode mode) {
                      {info->sha.substr(0, 16), fmt::format("/package/{}", info->sha)}});
 
     return detail::deliver(
-        fmt::format("<div>{}{}</div>{}", nav,
+        fmt::format("<div>{}{}{}</div>{}", nav, purgeLink({{"sha", info->sha}}),
                     downloadsLink({{"selcol", "sha"}, {"selval", info->sha}}), finfo),
         mode);
 }

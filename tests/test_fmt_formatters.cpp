@@ -102,9 +102,7 @@ TEST_CASE("FormatDuration formatter formats durations correctly", "[fmt][duratio
 // ============================================================================
 
 TEST_CASE("FmtSel conditional formatter", "[fmt][fmtsel]") {
-    SECTION("selects first when true") {
-        CHECK(fmt::format("{}", FmtSel{true, "A", "B"}) == "A");
-    }
+    SECTION("selects first when true") { CHECK(fmt::format("{}", FmtSel{true, "A", "B"}) == "A"); }
     SECTION("selects second when false") {
         CHECK(fmt::format("{}", FmtSel{false, "A", "B"}) == "B");
     }

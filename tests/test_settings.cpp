@@ -126,9 +126,7 @@ TEST_CASE("generateConfigYaml reflects explicitly set values", "[settings][gener
     // Compare durations via std::chrono::seconds (rep is long long, unambiguously printable on all
     // platforms including macOS/ARM64 where Duration::rep is __int128).
     namespace c = std::chrono;
-    const auto toSec = [](Duration d) {
-        return c::duration_cast<c::seconds>(d).count();
-    };
+    const auto toSec = [](Duration d) { return c::duration_cast<c::seconds>(d).count(); };
     CHECK(toSec(doc["maintenance"]["max_age"].as<Duration>()) ==
           toSec(c::duration_cast<Duration>(c::years{1})));
     CHECK(toSec(doc["maintenance"]["max_unused"].as<Duration>()) ==
@@ -141,4 +139,3 @@ TEST_CASE("generateConfigYaml reflects explicitly set values", "[settings][gener
     CHECK(doc["maintenance"]["max_total_size"].as<std::string>() == "100GB");
     CHECK(doc["maintenance"]["max_package_size"].as<std::string>() == "1GB");
 }
-

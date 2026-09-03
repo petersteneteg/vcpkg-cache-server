@@ -11,6 +11,7 @@ target_sources(vcpkg-cache-server-lib
         include/vcpkg-cache-server/functional.hpp
         include/vcpkg-cache-server/logging.hpp
         include/vcpkg-cache-server/maintenance.hpp
+        include/vcpkg-cache-server/purge.hpp
         include/vcpkg-cache-server/settings.hpp
         include/vcpkg-cache-server/site.hpp
         include/vcpkg-cache-server/store.hpp
@@ -19,6 +20,7 @@ target_sources(vcpkg-cache-server-lib
         src/functional.cpp
         src/logging.cpp
         src/maintenance.cpp
+        src/purge.cpp
         src/settings.cpp
         src/site.cpp
         src/store.cpp
@@ -128,6 +130,7 @@ if(VCACHE_BUILD_TESTS)
             tests/test_site_enums.cpp
             tests/test_database.cpp
             tests/test_settings.cpp
+            tests/test_purge.cpp
     )
     target_link_libraries(vcpkg-cache-server-tests
         PUBLIC

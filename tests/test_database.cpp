@@ -153,11 +153,8 @@ TEST_CASE("updateLastUse increments download count and updates timestamp", "[dat
     auto db = createTestDb();
     int pkgId = getOrAddPackageId(db, "test-package");
 
-    Cache cache{.sha = "update-test",
-                .package = pkgId,
-                .lastUsed = 100,
-                .downloads = 0,
-                .size = 512};
+    Cache cache{
+        .sha = "update-test", .package = pkgId, .lastUsed = 100, .downloads = 0, .size = 512};
     auto inserted = addCache(db, std::move(cache));
 
     Time newTime{Duration{500}};

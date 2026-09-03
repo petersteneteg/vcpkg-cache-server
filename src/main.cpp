@@ -4,6 +4,7 @@
 #include <vcpkg-cache-server/functional.hpp>
 #include <vcpkg-cache-server/database.hpp>
 #include <vcpkg-cache-server/maintenance.hpp>
+#include <vcpkg-cache-server/purge.hpp>
 #include <vcpkg-cache-server/logging.hpp>
 
 #include <httplib.h>
@@ -80,6 +81,28 @@ httplib::Server::HandlerWithContentReader authorizeRequest(
         }
 
         handler(req, res, content_reader);
+    };
+}
+
+httplib::Server::Handler authorizeRequest(const Authorization& auth,
+                                          httplib::Server::Handler handler) {
+    return [handler, &auth](const httplib::Request& req, httplib::Response& res) {
+        if (!req.has_header("Authorization")) {
+            res.set_header("WWW-Authenticate", "Bearer");
+            res.status = httplib::StatusCode::Unauthorized_401;
+            return;
+        }
+
+        const auto authHeader = req.get_header_value("Authorization");
+        const auto [scheme, token] = fp::parseAuthHeader(authHeader);
+
+        if (scheme != "Bearer" || !auth.write.contains(token)) {
+            res.set_header("WWW-Authenticate", "Bearer");
+            res.status = httplib::StatusCode::Forbidden_403;
+            return;
+        }
+
+        handler(req, res);
     };
 }
 
@@ -320,6 +343,17 @@ int main(int argc, char* argv[]) {
         return fp::mGet(req.params, "search").value_or(std::string{});
     };
 
+    const auto purgePattern = [](const httplib::Request& req) -> PurgePattern {
+        const auto nonEmpty = [](std::optional<std::string> v) -> std::optional<std::string> {
+            if (v && !v->empty()) return v;
+            return std::nullopt;
+        };
+        return PurgePattern{.sha = nonEmpty(fp::mGet(req.params, "sha")),
+                            .package = nonEmpty(fp::mGet(req.params, "package")),
+                            .version = nonEmpty(fp::mGet(req.params, "version")),
+                            .arch = nonEmpty(fp::mGet(req.params, "arch"))};
+    };
+
     server->Get("/status", [&](const httplib::Request& req, httplib::Response& res) {
         res.set_content(site::status(mode(req)), "text/html");
     });
@@ -353,6 +387,35 @@ int main(int argc, char* argv[]) {
         const auto sha = req.path_params.at("sha");
         res.set_content(site::sha(sha, store, mode(req)), "text/html");
     });
+
+    server->Get("/purge", [&](const httplib::Request& req, httplib::Response& res) {
+        res.set_content(site::purge(purgePattern(req), store, limit(req), mode(req)), "text/html");
+    });
+    server->Post(
+        "/purge",
+        authorizeRequest(settings.auth, [&](const httplib::Request& req, httplib::Response& res) {
+            const auto pattern = purgePattern(req);
+            if (vcache::empty(pattern)) {
+                res.status = httplib::StatusCode::BadRequest_400;
+                res.set_content("<p>Refusing to purge: no pattern fields specified</p>",
+                                "text/html");
+                return;
+            }
+
+            const auto [user, token] = requestUserToken(req, settings.auth);
+            log::info(*logger,
+                      "{:5} {:15} Purge requested sha={} package={} version={} arch={} User {}",
+                      req.method, req.remote_addr, pattern.sha.value_or("*"),
+                      pattern.package.value_or("*"), pattern.version.value_or("*"),
+                      pattern.arch.value_or("*"), user);
+
+            const auto result = purge(store, db, pattern, /*dryrun=*/false, logger);
+
+            log::info(*logger, "Purge removed {} entries, freed {}", result.removed.size(),
+                      ByteSize{result.totalSize});
+
+            res.set_content(site::purgeResult(result, mode(req)), "text/html");
+        }));
 
     server->Get(R"(/downloads)", [&](const httplib::Request& req, httplib::Response& res) {
         res.set_content(
