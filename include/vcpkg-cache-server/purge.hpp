@@ -15,10 +15,10 @@ namespace vcache {
 // Each set field is a glob pattern ('*' / '?'); unset fields match everything.
 // A cache entry must match all set fields to be selected.
 struct PurgePattern {
-    std::optional<std::string> sha;
-    std::optional<std::string> package;
-    std::optional<std::string> version;
-    std::optional<std::string> arch;
+    std::optional<std::string> sha = std::nullopt;
+    std::optional<std::string> package = std::nullopt;
+    std::optional<std::string> version = std::nullopt;
+    std::optional<std::string> arch = std::nullopt;
 };
 
 bool empty(const PurgePattern& pattern);
