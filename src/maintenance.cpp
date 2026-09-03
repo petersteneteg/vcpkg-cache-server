@@ -31,6 +31,21 @@ void maintain(Store& store, db::Database& db, const Maintenance& maintenance,
 
     log::info(*logger, "[Maintain] Running Maintenance");
 
+    {
+        using namespace sqlite_orm;
+        log::info(*logger, "[Maintain] Running sanity checks");
+        for (auto& cache : db.iterate<db::Cache>(
+                 where(and_(c(&db::Cache::deleted) == false, c(&db::Cache::size) == 0)))) {
+
+            allRemoved += removeCache(cache, db, toDelete, logger);
+        }
+        for (auto& cache : db.iterate<db::Cache>(where(c(&db::Cache::deleted) == false))) {
+            if (!store.exists(cache.sha)) {
+                allRemoved += removeCache(cache, db, toDelete, logger);
+            }
+        }
+    }
+
     allRemoved +=
         maintenance.maxAge
             .and_then([&](Duration maxAge) -> std::optional<size_t> {
