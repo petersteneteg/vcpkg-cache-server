@@ -89,6 +89,35 @@ constexpr auto endsWith(std::string_view suffix) {
     return [s = std::string(suffix)](const auto& str) { return str.ends_with(s); };
 }
 
+// Shell-style glob match of `text` against `pattern`, supporting '*' (any run of
+// characters, including none) and '?' (exactly one character). Case-sensitive.
+constexpr bool globMatch(std::string_view pattern, std::string_view text) {
+    size_t p = 0;
+    size_t t = 0;
+    size_t star = std::string_view::npos;
+    size_t match = 0;
+    while (t < text.size()) {
+        if (p < pattern.size() && (pattern[p] == '?' || pattern[p] == text[t])) {
+            ++p;
+            ++t;
+        } else if (p < pattern.size() && pattern[p] == '*') {
+            star = p;
+            match = t;
+            ++p;
+        } else if (star != std::string_view::npos) {
+            p = star + 1;
+            ++match;
+            t = match;
+        } else {
+            return false;
+        }
+    }
+    while (p < pattern.size() && pattern[p] == '*') {
+        ++p;
+    }
+    return p == pattern.size();
+}
+
 constexpr auto toPair(char sep) {
     return [sep](auto&& line) {
         auto [key, value] = splitByFirst(std::string_view(line), sep);
@@ -188,8 +217,7 @@ auto strToNum(std::string_view str) -> std::optional<T> {
     }
 }
 
-inline std::pair<std::string_view, std::string_view> parseAuthHeader(
-    std::string_view authHeader) {
+inline std::pair<std::string_view, std::string_view> parseAuthHeader(std::string_view authHeader) {
     auto [scheme, token] = splitByFirst(trim(authHeader));
     scheme = trim(scheme);
     token = trim(token);

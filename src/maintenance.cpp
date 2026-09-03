@@ -3,6 +3,8 @@
 
 namespace vcache {
 
+namespace detail {
+
 size_t removeCache(const db::Cache& cache, db::Database& db, std::vector<std::string>& toDelete,
                    std::shared_ptr<spdlog::logger> logger) {
     using namespace sqlite_orm;
@@ -20,8 +22,12 @@ size_t removeCache(const db::Cache& cache, db::Database& db, std::vector<std::st
     return cache.size;
 }
 
+}  // namespace detail
+
 void maintain(Store& store, db::Database& db, const Maintenance& maintenance,
               std::shared_ptr<spdlog::logger> logger, Time now) {
+
+    using detail::removeCache;
 
     std::vector<std::string> toDelete;
 

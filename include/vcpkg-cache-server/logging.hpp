@@ -97,4 +97,3 @@ critical(spdlog::logger&, fmt::format_string<Args...>, Args&&...) -> critical<Ar
 }  // namespace log
 
 }  // namespace vcache
-

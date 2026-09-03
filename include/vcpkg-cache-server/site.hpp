@@ -2,6 +2,7 @@
 
 #include <vcpkg-cache-server/functional.hpp>
 #include <vcpkg-cache-server/database.hpp>
+#include <vcpkg-cache-server/purge.hpp>
 #include <string>
 #include <string_view>
 #include <optional>
@@ -70,6 +71,11 @@ std::string downloads(db::Database& db, Mode mode, std::optional<size_t> sortIdx
 
 std::string index(const Store& store, db::Database& db, Mode mode, Sort sort,
                   std::optional<Order> order, std::string_view search);
+
+// Renders the purge form, and (when `pattern` selects at least one field) a paginated
+// preview of matching entries plus the equivalent curl command for the destructive POST.
+std::string purge(const PurgePattern& pattern, const Store& store, Limit limit, Mode mode);
+std::string purgeResult(const PurgeResult& result, Mode mode);
 
 std::string statusData();
 std::string status(Mode mode);

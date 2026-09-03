@@ -69,33 +69,15 @@ TEST_CASE("splitByFirst splits on first occurrence of delimiter", "[functional]"
 // ============================================================================
 
 TEST_CASE("trim removes leading and trailing whitespace", "[functional]") {
-    SECTION("basic trim") {
-        CHECK(trim("  hello  ") == "hello");
-    }
-    SECTION("no whitespace") {
-        CHECK(trim("hello") == "hello");
-    }
-    SECTION("only leading whitespace") {
-        CHECK(trim("  hello") == "hello");
-    }
-    SECTION("only trailing whitespace") {
-        CHECK(trim("hello  ") == "hello");
-    }
-    SECTION("all whitespace types") {
-        CHECK(trim(" \t\n\r\f\vhello\t\n ") == "hello");
-    }
-    SECTION("empty string") {
-        CHECK(trim("") == "");
-    }
-    SECTION("only whitespace") {
-        CHECK(trim("   ") == "");
-    }
-    SECTION("single character") {
-        CHECK(trim("x") == "x");
-    }
-    SECTION("preserves internal whitespace") {
-        CHECK(trim("  hello world  ") == "hello world");
-    }
+    SECTION("basic trim") { CHECK(trim("  hello  ") == "hello"); }
+    SECTION("no whitespace") { CHECK(trim("hello") == "hello"); }
+    SECTION("only leading whitespace") { CHECK(trim("  hello") == "hello"); }
+    SECTION("only trailing whitespace") { CHECK(trim("hello  ") == "hello"); }
+    SECTION("all whitespace types") { CHECK(trim(" \t\n\r\f\vhello\t\n ") == "hello"); }
+    SECTION("empty string") { CHECK(trim("") == ""); }
+    SECTION("only whitespace") { CHECK(trim("   ") == ""); }
+    SECTION("single character") { CHECK(trim("x") == "x"); }
+    SECTION("preserves internal whitespace") { CHECK(trim("  hello world  ") == "hello world"); }
 }
 
 // ============================================================================
@@ -103,18 +85,10 @@ TEST_CASE("trim removes leading and trailing whitespace", "[functional]") {
 // ============================================================================
 
 TEST_CASE("remove_suffix removes n characters from end", "[functional]") {
-    SECTION("basic removal") {
-        CHECK(remove_suffix("hello", 2) == "hel");
-    }
-    SECTION("remove nothing") {
-        CHECK(remove_suffix("hello", 0) == "hello");
-    }
-    SECTION("remove all") {
-        CHECK(remove_suffix("hello", 5) == "");
-    }
-    SECTION("remove one character") {
-        CHECK(remove_suffix("hello", 1) == "hell");
-    }
+    SECTION("basic removal") { CHECK(remove_suffix("hello", 2) == "hel"); }
+    SECTION("remove nothing") { CHECK(remove_suffix("hello", 0) == "hello"); }
+    SECTION("remove all") { CHECK(remove_suffix("hello", 5) == ""); }
+    SECTION("remove one character") { CHECK(remove_suffix("hello", 1) == "hell"); }
 }
 
 // ============================================================================
@@ -214,12 +188,8 @@ TEST_CASE("endsWith creates a suffix-checking predicate", "[functional]") {
         CHECK_FALSE(endsWithTxt(std::string{"file.cpp"}));
         CHECK_FALSE(endsWithZip(std::string{"file.txt"}));
     }
-    SECTION("empty string") {
-        CHECK_FALSE(endsWithTxt(std::string{""}));
-    }
-    SECTION("suffix only") {
-        CHECK(endsWithTxt(std::string{".txt"}));
-    }
+    SECTION("empty string") { CHECK_FALSE(endsWithTxt(std::string{""})); }
+    SECTION("suffix only") { CHECK(endsWithTxt(std::string{".txt"})); }
 }
 
 // ============================================================================
@@ -323,18 +293,10 @@ TEST_CASE("strToNum parses valid doubles", "[functional]") {
 }
 
 TEST_CASE("strToNum returns nullopt for invalid input", "[functional]") {
-    SECTION("empty string") {
-        CHECK_FALSE(strToNum<size_t>("").has_value());
-    }
-    SECTION("non-numeric") {
-        CHECK_FALSE(strToNum<size_t>("abc").has_value());
-    }
-    SECTION("trailing non-numeric") {
-        CHECK_FALSE(strToNum<size_t>("42abc").has_value());
-    }
-    SECTION("leading non-numeric") {
-        CHECK_FALSE(strToNum<size_t>("abc42").has_value());
-    }
+    SECTION("empty string") { CHECK_FALSE(strToNum<size_t>("").has_value()); }
+    SECTION("non-numeric") { CHECK_FALSE(strToNum<size_t>("abc").has_value()); }
+    SECTION("trailing non-numeric") { CHECK_FALSE(strToNum<size_t>("42abc").has_value()); }
+    SECTION("leading non-numeric") { CHECK_FALSE(strToNum<size_t>("abc42").has_value()); }
 }
 
 // ============================================================================
@@ -367,4 +329,50 @@ TEST_CASE("parseAuthHeader splits scheme and token", "[functional]") {
         CHECK(scheme == "");
         CHECK(token == "");
     }
+}
+
+// ============================================================================
+// globMatch
+// ============================================================================
+
+TEST_CASE("globMatch matches literal strings exactly", "[functional]") {
+    CHECK(globMatch("zlib", "zlib"));
+    CHECK_FALSE(globMatch("zlib", "zlib2"));
+    CHECK_FALSE(globMatch("zlib", "libz"));
+    CHECK_FALSE(globMatch("zlib", ""));
+}
+
+TEST_CASE("globMatch empty pattern only matches empty text", "[functional]") {
+    CHECK(globMatch("", ""));
+    CHECK_FALSE(globMatch("", "zlib"));
+}
+
+TEST_CASE("globMatch supports '*' wildcard", "[functional]") {
+    CHECK(globMatch("*", ""));
+    CHECK(globMatch("*", "anything"));
+    CHECK(globMatch("zlib*", "zlib"));
+    CHECK(globMatch("zlib*", "zlib1.3.1"));
+    CHECK_FALSE(globMatch("zlib*", "libzlib"));
+    CHECK(globMatch("*zlib", "libzlib"));
+    CHECK_FALSE(globMatch("*zlib", "zlibx"));
+    CHECK(globMatch("x64-*", "x64-linux"));
+    CHECK(globMatch("x64-*", "x64-windows"));
+    CHECK_FALSE(globMatch("x64-*", "x86-windows"));
+    CHECK(globMatch("*openssl*", "vcpkg-openssl-1.0"));
+    CHECK(globMatch("**", "anything"));
+}
+
+TEST_CASE("globMatch supports '?' wildcard", "[functional]") {
+    CHECK(globMatch("a?c", "abc"));
+    CHECK_FALSE(globMatch("a?c", "ac"));
+    CHECK_FALSE(globMatch("a?c", "abbc"));
+    CHECK(globMatch("????", "abcd"));
+    CHECK_FALSE(globMatch("????", "abc"));
+}
+
+TEST_CASE("globMatch supports combined wildcards", "[functional]") {
+    CHECK(globMatch("*.txt", "file.txt"));
+    CHECK(globMatch("?ib*", "libzlib.so"));
+    CHECK(globMatch("a*b?c", "aXXbYc"));
+    CHECK_FALSE(globMatch("a*b?c", "aXXbYYc"));
 }
