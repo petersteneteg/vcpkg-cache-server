@@ -17,7 +17,7 @@
     "argparse",
     "yaml-cpp",
     "sqlite-orm",
-    "rapidfuzz",
+    "rapidfuzz-cpp",
     "fmt",
     "fast-float",
     "catch2"
