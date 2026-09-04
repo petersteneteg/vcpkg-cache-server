@@ -237,16 +237,16 @@ TEST_CASE("detail::link creates HTMX link", "[site][detail]") {
 
 TEST_CASE("detail::button creates sortable column header", "[site][detail]") {
     SECTION("shows up arrow when sorted ascending") {
-        auto result = detail::button("/", "Name", Sort::Name, Sort::Name, Order::Ascending);
+        auto result = detail::button(Url{.path = "/"}, "Name", Sort::Name, Sort::Name, Order::Ascending);
         CHECK(result.find("Name") != std::string::npos);
         CHECK(result.find("&#8593") != std::string::npos);  // up arrow
     }
     SECTION("shows down arrow when sorted descending") {
-        auto result = detail::button("/", "Name", Sort::Name, Sort::Name, Order::Descending);
+        auto result = detail::button(Url{.path = "/"}, "Name", Sort::Name, Sort::Name, Order::Descending);
         CHECK(result.find("&#8595") != std::string::npos);  // down arrow
     }
     SECTION("shows no arrow when different column sorted") {
-        auto result = detail::button("/", "Name", Sort::Name, Sort::Size, Order::Ascending);
+        auto result = detail::button(Url{.path = "/"}, "Name", Sort::Name, Sort::Size, Order::Ascending);
         CHECK(result.find("&#8593") == std::string::npos);
         CHECK(result.find("&#8595") == std::string::npos);
     }

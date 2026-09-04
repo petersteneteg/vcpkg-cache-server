@@ -200,18 +200,18 @@ std::string formatMap(const std::map<std::string, std::string>& range) {
     return buff;
 }
 
-std::string button(std::string_view url, std::string_view content, Sort tag, Sort currentSort,
+std::string button(Url url, std::string_view content, Sort tag, Sort currentSort,
                    Order currentOrder) {
     static constexpr std::string_view str = R"(
         <a class="pointer link-underline 
                   link-offset-2-hover 
                   link-underline-opacity-0 
                   link-underline-opacity-75-hover" 
-           hx-get="{0}?mode=plain&sort={1}&order={2}"
+           hx-get="{0}"
            hx-target="#content" 
            hx-swap="innerHTML" 
-           hx-push-url="{0}?sort={1}&order={2}">
-            {3}{4}
+           hx-push-url="{1}">
+            {2}{3}
         </a>
     )";
 
@@ -238,11 +238,18 @@ std::string button(std::string_view url, std::string_view content, Sort tag, Sor
         }
     }();
 
-    return fmt::format(str, url, tag, newOrder, content, indicator);
+    url.params["sort"] = fmt::to_string(tag);
+    url.params["order"] = fmt::to_string(newOrder);
+
+    url.params["mode"] = "plain";
+    const auto plainUrl = fmt::to_string(url);
+    url.params.erase("mode");
+    const auto fullUrl = fmt::to_string(url);
+
+    return fmt::format(str, plainUrl, fullUrl, content, indicator);
 }
 
-std::string pillBar(std::string_view path, const std::set<std::string>& values,
-                    std::string_view selected) {
+std::string pillBar(Url url, const std::set<std::string>& values, std::string_view selected) {
     static constexpr std::string_view str = R"(
         <a class="badge rounded-pill text-bg-{0} pointer text-decoration-none me-1"
            hx-get="{1}"
@@ -254,12 +261,16 @@ std::string pillBar(std::string_view path, const std::set<std::string>& values,
     )";
 
     const auto pill = [&](std::string_view label, std::string_view value, bool active) {
-        Url plainUrl{.path = std::string{path}, .params = {{"mode", "plain"}}};
-        Url fullUrl{.path = std::string{path}, .params = {}};
-        if (!value.empty()) {
-            plainUrl.params["arch"] = std::string{value};
-            fullUrl.params["arch"] = std::string{value};
+        Url u = url;
+        if (value.empty()) {
+            u.params.erase("arch");
+        } else {
+            u.params["arch"] = std::string{value};
         }
+        u.params["mode"] = "plain";
+        const auto plainUrl = fmt::to_string(u);
+        u.params.erase("mode");
+        const auto fullUrl = fmt::to_string(u);
         return fmt::format(str, active ? "primary" : "secondary", plainUrl, fullUrl, label);
     };
 
@@ -399,7 +410,7 @@ std::string buttonIdx(Url url, std::string_view content, size_t sortIdx, size_t 
     return fmt::format(str, plainUrl, fullUrl, content, indicator);
 }
 
-std::string downloadsLink(Params params, std::optional<std::pair<std::string, std::string>> back = std::nullopt) {
+std::string downloadsLink(Params params, std::optional<Crumb> back = std::nullopt) {
     Url purl{.path = "/downloads", .params = {{"mode", "plain"}}};
     Url furl{.path = "/downloads", .params = {{"mode", "full"}}};
     purl.params.insert_range(params);
@@ -427,7 +438,7 @@ std::string downloadsLink(Params params, std::optional<std::pair<std::string, st
     return fmt::format(str, purl, furl);
 }
 
-std::string purgeLink(Params params, std::optional<std::pair<std::string, std::string>> back = std::nullopt) {
+std::string purgeLink(Params params, std::optional<Crumb> back = std::nullopt) {
     Url purl{.path = "/purge", .params = {{"mode", "plain"}}};
     Url furl{.path = "/purge", .params = {{"mode", "full"}}};
     purl.params.insert_range(params);
@@ -466,6 +477,15 @@ std::string detail::nav(const std::vector<std::pair<std::string, std::string>>& 
 
     return fmt::format(R"(<nav class="d-inline-block"><ol class="breadcrumb fs-4">{}</ol></nav>)",
                        str);
+}
+
+std::string detail::nav(std::optional<Crumb> back, Crumb self) {
+    std::vector<Crumb> path{{"Packages", "/"}};
+    if (back) {
+        path.push_back(*back);
+    }
+    path.push_back(std::move(self));
+    return nav(path);
 }
 
 std::string detail::deliver(std::string_view content, Mode mode) {
@@ -510,10 +530,7 @@ decltype(auto) getRowItem() {
         return nullptr;
 }
 
-std::string index(const Store& store, db::Database& db, Mode mode, Sort sort,
-                  std::optional<Order> maybeOrder, std::string_view search,
-                  std::string_view archFilter) {
-    const auto order = maybeOrder.value_or(Order::Ascending);
+std::string index(const Store& store, db::Database& db, State state) {
     const auto keys =
         store.allInfos() | std::views::transform(&Info::package) | std::ranges::to<std::set>();
     const auto archs =
@@ -521,12 +538,12 @@ std::string index(const Store& store, db::Database& db, Mode mode, Sort sort,
 
     std::map<std::string, std::vector<const Info*>> packages;
     std::ranges::for_each(store.allInfos(), [&](const Info& info) {
-        if (archFilter.empty() || info.arch == archFilter) {
+        if (state.archFilter.empty() || info.arch == state.archFilter) {
             packages[info.package].push_back(&info);
         }
     });
 
-    rapidfuzz::fuzz::CachedPartialRatio<char> scorer(search);
+    rapidfuzz::fuzz::CachedPartialRatio<char> scorer(state.search);
     auto list = packages | std::views::transform([&](const auto& package) -> RowItem {
                     auto& [name, items] = package;
                     const auto range =
@@ -536,16 +553,22 @@ std::string index(const Store& store, db::Database& db, Mode mode, Sort sort,
 
                     const auto [firstIt, lastIt] = std::ranges::minmax_element(
                         items, std::less<>{}, [](const Info* i) { return i->time; });
-                    const auto similarity = search.empty() ? 1.0 : scorer.similarity(name);
+
+                    auto similarity = 100.0;
+                    if (!state.search.empty()) {
+                        const auto shaSimilarity =
+                            std::ranges::max(items | std::views::transform([&](const auto* item) {
+                                                 return scorer.similarity(item->sha);
+                                             }));
+                        similarity = std::max(shaSimilarity, scorer.similarity(name));
+                    }
 
                     const auto [downloads, lastUse] = db::getPackageDownloadsAndLastUse(db, name);
 
                     return {name,    items.size(),     diskSize,        downloads,
                             lastUse, (*firstIt)->time, (*lastIt)->time, similarity};
                 }) |
-                std::views::filter([&](const RowItem& item) {
-                    return search.empty() ? true : item.similarity > 55.0;
-                }) |
+                std::views::filter([](const RowItem& item) { return item.similarity > 55.0; }) |
                 std::ranges::to<std::vector>();
 
     constexpr auto table = []<size_t... Is>(std::integer_sequence<size_t, Is...>) {
@@ -559,12 +582,12 @@ std::string index(const Store& store, db::Database& db, Mode mode, Sort sort,
                 }
             }
         }...};
-    }(std::make_integer_sequence<size_t, std::to_underlying(Sort::NumSortMethods)>());
-
-    table[std::to_underlying(sort)](list, order);
-
-    if (sort == Sort::Default && !search.empty()) {
+    }
+    (std::make_integer_sequence<size_t, std::to_underlying(Sort::NumSortMethods)>());
+    if (state.sort == Sort::Default && !state.search.empty()) {
         std::ranges::sort(list, std::greater<>{}, &RowItem::similarity);
+    } else {
+        table[std::to_underlying(state.sort)](list, state.order);
     }
 
     static constexpr std::string_view itemStr = R"(
@@ -594,9 +617,13 @@ std::string index(const Store& store, db::Database& db, Mode mode, Sort sort,
         list | std::views::transform([&](const RowItem& item) {
             Url plainUrl{.path = fmt::format("/find/{}", item.name), .params = {{"mode", "plain"}}};
             Url fullUrl{.path = fmt::format("/find/{}", item.name), .params = {}};
-            if (!archFilter.empty()) {
-                plainUrl.params["arch"] = std::string{archFilter};
-                fullUrl.params["arch"] = std::string{archFilter};
+            if (!state.archFilter.empty()) {
+                plainUrl.params["arch"] = std::string{state.archFilter};
+                fullUrl.params["arch"] = std::string{state.archFilter};
+            }
+            if (!state.search.empty()) {
+                plainUrl.params["search"] = std::string{state.search};
+                fullUrl.params["search"] = std::string{state.search};
             }
             return fmt::format(itemStr, item.name, item.count, ByteSize{item.diskSize},
                                item.downloads, item.lastUse, item.firstTime, item.lastTime,
@@ -614,13 +641,26 @@ std::string index(const Store& store, db::Database& db, Mode mode, Sort sort,
     const auto stats = fmt::format("Found {} caches of {} packages. Using {}", totalCount,
                                    list.size(), ByteSize{totalSize});
 
-    const auto nameButton = detail::button("/", "Package", Sort::Name, sort, order);
-    const auto countButton = detail::button("/", "Count", Sort::Count, sort, order);
-    const auto sizeButton = detail::button("/", "Size", Sort::Size, sort, order);
-    const auto downloadsButton = detail::button("/", "Downloads", Sort::Downloads, sort, order);
-    const auto useButton = detail::button("/", "Last Use", Sort::Use, sort, order);
-    const auto firstButton = detail::button("/", "First Cache", Sort::First, sort, order);
-    const auto lastButton = detail::button("/", "Last Cache", Sort::Last, sort, order);
+    // Shared state carried by both the sort buttons and the arch pills, so clicking one
+    // doesn't discard the other's current selection (or the search term).
+    Url stateUrl{
+        .path = "/",
+        .params = {{"sort", fmt::to_string(state.sort)}, {"order", fmt::to_string(state.order)}}};
+    if (!state.search.empty()) stateUrl.params["search"] = std::string{state.search};
+    if (!state.archFilter.empty()) stateUrl.params["arch"] = std::string{state.archFilter};
+
+    const auto nameButton =
+        detail::button(stateUrl, "Package", Sort::Name, state.sort, state.order);
+    const auto countButton =
+        detail::button(stateUrl, "Count", Sort::Count, state.sort, state.order);
+    const auto sizeButton = detail::button(stateUrl, "Size", Sort::Size, state.sort, state.order);
+    const auto downloadsButton =
+        detail::button(stateUrl, "Downloads", Sort::Downloads, state.sort, state.order);
+    const auto useButton = detail::button(stateUrl, "Last Use", Sort::Use, state.sort, state.order);
+    const auto firstButton =
+        detail::button(stateUrl, "First Cache", Sort::First, state.sort, state.order);
+    const auto lastButton =
+        detail::button(stateUrl, "Last Cache", Sort::Last, state.sort, state.order);
 
     const auto headerRow = fmt::format(R"(
             <tr>
@@ -637,7 +677,7 @@ std::string index(const Store& store, db::Database& db, Mode mode, Sort sort,
                                        useButton, firstButton, lastButton);
 
     const auto nav = detail::nav({{"Packages", "/"}});
-    const auto archPills = detail::pillBar("/", archs, archFilter);
+    const auto archPills = detail::pillBar(stateUrl, archs, state.archFilter);
 
     static constexpr std::string_view html = R"(
         <div>{0}{1}</div>
@@ -663,10 +703,10 @@ std::string index(const Store& store, db::Database& db, Mode mode, Sort sort,
         </div>
     )";
     const auto content =
-        fmt::format(html, nav, fmt::format("{}{}", purgeLink({}), downloadsLink({})), search, stats,
-                    headerRow, str, archPills);
+        fmt::format(html, nav, fmt::format("{}{}", purgeLink({}), downloadsLink({})), state.search,
+                    stats, headerRow, str, archPills);
 
-    return detail::deliver(content, mode);
+    return detail::deliver(content, state.mode);
 }
 
 namespace {
@@ -700,7 +740,7 @@ constexpr std::string_view purgeTableHeader = R"(
 }  // namespace
 
 std::string purge(const PurgePattern& pattern, const Store& store, Limit limit, Mode mode,
-                  std::optional<std::pair<std::string, std::string>> back) {
+                  std::optional<Crumb> back) {
     Url purgeUrl{.path = "/purge", .params = {}};
     if (pattern.sha) purgeUrl.params["sha"] = *pattern.sha;
     if (pattern.package) purgeUrl.params["package"] = *pattern.package;
@@ -814,12 +854,7 @@ std::string purge(const PurgePattern& pattern, const Store& store, Limit limit, 
                                   pattern.version.value_or(""), pattern.arch.value_or(""), purgeUrl,
                                   totalMatches, disabledAttr);
 
-    std::vector<std::pair<std::string, std::string>> navPath{{"Packages", "/"}};
-    if (back) {
-        navPath.push_back(*back);
-    }
-    navPath.emplace_back("Purge", "/purge");
-    const auto nav = detail::nav(navPath);
+    const auto nav = detail::nav(back, {"Purge", "/purge"});
     const auto content = fmt::format(R"(<div>{}</div><h4>Purge Caches</h4>{}{}{})", nav, form,
                                      previewSection, curlSection);
 
@@ -915,6 +950,7 @@ struct CacheItem {
     Time lastUse;
     Time created;
     std::string_view sha;
+    double similarity;
 };
 
 template <Sort S>
@@ -938,30 +974,38 @@ decltype(auto) getCacheItem() {
         return &CacheItem::created;
 }
 
-std::string find(std::string_view package, const Store& store, db::Database& db, Mode mode,
-                 Sort sort, std::optional<Order> maybeOrder, std::string_view archFilter) {
-    const auto order = maybeOrder.value_or(Order::Ascending);
+std::string find(std::string_view package, const Store& store, db::Database& db, State state) {
 
     const auto matchesPackage = [&](const auto& info) { return info.package == package; };
 
     const auto archs = store.allInfos() | std::views::filter(matchesPackage) |
                        std::views::transform(&Info::arch) | std::ranges::to<std::set>();
 
-    auto list = store.allInfos() | std::views::filter(matchesPackage) |
-                std::views::filter([&](const auto& info) {
-                    return archFilter.empty() || info.arch == archFilter;
-                }) |
-                std::views::transform([&](const auto& info) -> CacheItem {
-                    const auto [downloads, lastUse] = db::getCacheDownloadsAndLastUse(db, info.sha);
-                    return {.version = info.version,
-                            .arch = info.arch,
-                            .diskSize = info.size,
-                            .downloads = downloads,
-                            .lastUse = lastUse,
-                            .created = info.time,
-                            .sha = info.sha};
-                }) |
-                std::ranges::to<std::vector>();
+    rapidfuzz::fuzz::CachedPartialRatio<char> scorer(state.search);
+    auto list =
+        store.allInfos() | std::views::filter(matchesPackage) |
+        std::views::filter([&](const auto& info) {
+            return state.archFilter.empty() || info.arch == state.archFilter;
+        }) |
+        std::views::transform([&](const auto& info) -> CacheItem {
+            const auto [downloads, lastUse] = db::getCacheDownloadsAndLastUse(db, info.sha);
+            const auto similarity =
+                state.search.empty()
+                    ? 100.0
+                    : std::ranges::max({scorer.similarity(package), scorer.similarity(info.version),
+                                        scorer.similarity(info.sha), scorer.similarity(info.arch)});
+
+            return {.version = info.version,
+                    .arch = info.arch,
+                    .diskSize = info.size,
+                    .downloads = downloads,
+                    .lastUse = lastUse,
+                    .created = info.time,
+                    .sha = info.sha,
+                    .similarity = similarity};
+        }) |
+        std::views::filter([&](const CacheItem& item) { return item.similarity > 55.0; }) |
+        std::ranges::to<std::vector>();
 
     constexpr auto table = []<size_t... Is>(std::integer_sequence<size_t, Is...>) {
         return std::array{+[](decltype(list)& list, Order order) {
@@ -972,17 +1016,34 @@ std::string find(std::string_view package, const Store& store, db::Database& db,
                 std::ranges::sort(list, std::greater<>{}, proj);
             }
         }...};
-    }(std::make_integer_sequence<size_t, std::to_underlying(Sort::NumSortMethods)>());
-    table[std::to_underlying(sort)](list, order);
+    }
+    (std::make_integer_sequence<size_t, std::to_underlying(Sort::NumSortMethods)>());
+    if (state.sort == Sort::Default && !state.search.empty()) {
+        std::ranges::sort(list, std::greater<>{}, &CacheItem::similarity);
+    } else {
+        table[std::to_underlying(state.sort)](list, state.order);
+    }
 
     const auto path = fmt::format("/find/{0}", package);
-    const auto versionButton = detail::button(path, "Version", Sort::Version, sort, order);
-    const auto archButton = detail::button(path, "Arch", Sort::Arch, sort, order);
-    const auto sizeButton = detail::button(path, "Size", Sort::Size, sort, order);
-    const auto downloadsButton = detail::button(path, "Downloads", Sort::Downloads, sort, order);
-    const auto useButton = detail::button(path, "Last Use", Sort::Use, sort, order);
-    const auto firstButton = detail::button(path, "Created", Sort::First, sort, order);
-    const auto shaButton = detail::button(path, "SHA", Sort::SHA, sort, order);
+
+    // Shared state carried by both the sort buttons and the arch pills, so clicking one
+    // doesn't discard the other's current selection.
+    Url stateUrl{
+        .path = path,
+        .params = {{"sort", fmt::to_string(state.sort)}, {"order", fmt::to_string(state.order)}}};
+    if (!state.archFilter.empty()) stateUrl.params["arch"] = std::string{state.archFilter};
+    if (!state.search.empty()) stateUrl.params["search"] = std::string{state.search};
+
+    const auto versionButton =
+        detail::button(stateUrl, "Version", Sort::Version, state.sort, state.order);
+    const auto archButton = detail::button(stateUrl, "Arch", Sort::Arch, state.sort, state.order);
+    const auto sizeButton = detail::button(stateUrl, "Size", Sort::Size, state.sort, state.order);
+    const auto downloadsButton =
+        detail::button(stateUrl, "Downloads", Sort::Downloads, state.sort, state.order);
+    const auto useButton = detail::button(stateUrl, "Last Use", Sort::Use, state.sort, state.order);
+    const auto firstButton =
+        detail::button(stateUrl, "Created", Sort::First, state.sort, state.order);
+    const auto shaButton = detail::button(stateUrl, "SHA", Sort::SHA, state.sort, state.order);
 
     const auto headerRow = fmt::format(R"(
             <tr>
@@ -1042,23 +1103,43 @@ std::string find(std::string_view package, const Store& store, db::Database& db,
                      std::views::join | std::ranges::to<std::string>();
 
     const auto count = list.size();
-    const auto diskSize = std::ranges::fold_left(
-        list | std::views::transform(&CacheItem::diskSize), size_t{0}, std::plus<>{});
+    const auto diskSize = std::ranges::fold_left(list | std::views::transform(&CacheItem::diskSize),
+                                                 size_t{0}, std::plus<>{});
 
-    const auto backCrumb =
-        std::pair<std::string, std::string>{std::string{package}, fmt::format("/find/{}", package)};
+    const auto backCrumb = Crumb{std::string{package}, fmt::format("/find/{}", package)};
     const auto nav =
         detail::nav({{"Packages", "/"}, {std::string{package}, fmt::format("/find/{}", package)}});
-    const auto content =
-        fmt::format(
-            R"(<div>{}{}{}</div>{}<h4>Count: {}, Total Size: {}</h4>)"
-            R"(<div class="table-responsive"><table class="table table-hover table-sm align-middle">)"
-            R"(<thead>{}</thead><tbody>{}</tbody></table></div>)",
-            nav, purgeLink({{"package", std::string{package}}}, backCrumb),
-            downloadsLink({{"selcol", "name"}, {"selval", std::string{package}}}, backCrumb),
-            detail::pillBar(path, archs, archFilter), count, ByteSize{diskSize}, headerRow, str);
 
-    return detail::deliver(content, mode);
+    static constexpr std::string_view html = R"(
+        <div>{0}{1}{2}</div>
+        {3}
+        <input class="form-control"
+               id="search"
+               type="search"
+               name="search"
+               value="{4}"
+               placeholder="Search Versions..."
+               hx-get="{5}?mode=plain" 
+               hx-target="#content" 
+               hx-swap="innerHTML"
+               hx-trigger="input changed delay:500ms, keyup[key=='Enter']"
+               hx-indicator=".htmx-indicator">
+        <h4>Count: {6}, Total Size: {7}</h4>
+        <span class="htmx-indicator">Searching...</span>
+        <div class="table-responsive">
+            <table class="table table-hover table-sm align-middle">
+                <thead>{8}</thead>
+                <tbody>{9}</tbody>
+            </table>
+        </div>
+    )";
+    const auto content = fmt::format(
+        html, nav, purgeLink({{"package", std::string{package}}}, backCrumb),
+        downloadsLink({{"selcol", "name"}, {"selval", std::string{package}}}, backCrumb),
+        detail::pillBar(stateUrl, archs, state.archFilter), state.search, path, count,
+        ByteSize{diskSize}, headerRow, str);
+
+    return detail::deliver(content, state.mode);
 }
 
 std::string sha(std::string_view sha, const Store& store, Mode mode) {
@@ -1073,20 +1154,13 @@ std::string sha(std::string_view sha, const Store& store, Mode mode) {
                      {info->package, fmt::format("/find/{}", info->package)},
                      {info->sha.substr(0, 16), fmt::format("/package/{}", info->sha)}});
 
-    const auto backCrumb = std::pair<std::string, std::string>{
-        std::string{info->sha.substr(0, 16)}, fmt::format("/package/{}", info->sha)};
+    const auto backCrumb =
+        Crumb{std::string{info->sha.substr(0, 16)}, fmt::format("/package/{}", info->sha)};
     return detail::deliver(
         fmt::format("<div>{}{}{}</div>{}", nav, purgeLink({{"sha", info->sha}}, backCrumb),
                     downloadsLink({{"selcol", "sha"}, {"selval", info->sha}}, backCrumb), finfo),
         mode);
 }
-
-struct AgeAlias : sqlite_orm::alias_tag {
-    static const std::string& get() {
-        static const std::string res = "Age";
-        return res;
-    }
-};
 
 auto colNames(const auto& stmt) {
     constexpr auto count = decltype(stmt.expression.col)::count;
@@ -1130,7 +1204,7 @@ auto executeQueary(db::Database& db, auto& cols, auto& orderBy, Limit limits,
 std::string downloads(db::Database& db, Mode mode, std::optional<size_t> sortIdx,
                       std::optional<Order> order, Limit limits,
                       std::optional<std::pair<Sort, std::string>> selection,
-                      std::optional<std::pair<std::string, std::string>> back) {
+                      std::optional<Crumb> back) {
 
     using namespace sqlite_orm;
 
@@ -1144,7 +1218,8 @@ std::string downloads(db::Database& db, Mode mode, std::optional<size_t> sortIdx
             auto item = order_by(std::get<Is>(cols.columns));
             ordering.push_back(setOrder(item, order));
         }...};
-    }(std::make_integer_sequence<size_t, cols.count>());
+    }
+    (std::make_integer_sequence<size_t, cols.count>());
     table[sortIdx.value_or(size_t{0})](orderBy, cols, order.value_or(Order::Descending));
 
     auto [data, names] = executeQueary(db, cols, orderBy, limits, selection);
@@ -1167,7 +1242,8 @@ std::string downloads(db::Database& db, Mode mode, std::optional<size_t> sortIdx
                                           order.value_or(Order::Descending));
             return fmt::format(R"(<th>{}</th>)", button);
         }()...};
-    }(std::make_integer_sequence<size_t, cols.count>());
+    }
+    (std::make_integer_sequence<size_t, cols.count>());
     const auto headerRow =
         fmt::format(R"(<tr>{}</tr>)", header | std::views::join | std::ranges::to<std::string>());
 
@@ -1211,12 +1287,7 @@ std::string downloads(db::Database& db, Mode mode, std::optional<size_t> sortIdx
         return str;
     }
 
-    std::vector<std::pair<std::string, std::string>> navPath{{"Packages", "/"}};
-    if (back) {
-        navPath.push_back(*back);
-    }
-    navPath.emplace_back("Downloads", "/downloads");
-    const auto nav = detail::nav(navPath);
+    const auto nav = detail::nav(back, {"Downloads", "/downloads"});
     const auto content = fmt::format(R"(<div>{}</div><h4>Downloads</h4>)"
                                      R"(<div class="table-responsive">)"
                                      R"(<table class="table table-hover table-sm align-middle">)"

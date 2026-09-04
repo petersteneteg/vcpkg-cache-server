@@ -54,33 +54,35 @@ struct Url {
     Params params;
 };
 
+// A breadcrumb entry: {label, url}.
+using Crumb = std::pair<std::string, std::string>;
+
+struct State {
+    Mode mode = Mode::Full;
+    Sort sort = Sort::Default;
+    Order order = Order::Ascending;
+    std::string archFilter = {};
+    std::string search = {};
+};
+
 std::string match();
 std::string compare(std::string_view sha, const Store& store, Mode mode);
 std::string match(std::string_view abi, std::string_view package, const Store& store);
-std::string list(const Store& store);
-std::string find(std::string_view package, const Store& store, db::Database& db, Mode mode,
-                 Sort sort, std::optional<Order> order, std::string_view archFilter = {});
 std::string sha(std::string_view package, const Store& store, Mode mode);
 std::string favicon();
 std::string maskicon();
 
 std::optional<std::pair<std::string, std::string>> script(std::string_view name);
+std::string index(const Store& store, db::Database& db, State state);
+std::string find(std::string_view package, const Store& store, db::Database& db, State state);
 
 std::string downloads(db::Database& db, Mode mode, std::optional<size_t> sortIdx,
                       std::optional<Order> order, Limit limit,
                       std::optional<std::pair<Sort, std::string>> selection,
-                      std::optional<std::pair<std::string, std::string>> back = std::nullopt);
+                      std::optional<Crumb> back = std::nullopt);
 
-std::string index(const Store& store, db::Database& db, Mode mode, Sort sort,
-                  std::optional<Order> order, std::string_view search,
-                  std::string_view archFilter = {});
-
-// Renders the purge form, and (when `pattern` selects at least one field) a paginated
-// preview of matching entries plus the equivalent curl command for the destructive POST.
-// `back`, when set, is an extra {label, url} breadcrumb entry inserted before "Purge" so the
-// page can link back to the find/package page it was reached from.
 std::string purge(const PurgePattern& pattern, const Store& store, Limit limit, Mode mode,
-                  std::optional<std::pair<std::string, std::string>> back = std::nullopt);
+                  std::optional<Crumb> back = std::nullopt);
 std::string purgeResult(const PurgeResult& result, Mode mode);
 
 std::string statusData();
@@ -90,18 +92,23 @@ namespace detail {
 
 std::string deliver(std::string_view content, Mode mode);
 std::string nav(const std::vector<std::pair<std::string, std::string>>& path = {});
+// Convenience overload: {Packages -> back (if set) -> self}, used by pages reached from a
+// find/package page (Purge, Downloads) to avoid re-building the same breadcrumb vector.
+std::string nav(std::optional<Crumb> back, Crumb self);
 
 size_t missmatches(const std::map<std::string, std::string>& map1,
                    const std::map<std::string, std::string>& map2);
 std::string formatDiff(const std::map<std::string, std::string>& dstMap,
                        const std::map<std::string, std::string>& srcMap);
 std::string formatMap(const std::map<std::string, std::string>& range);
-std::string button(std::string_view url, std::string_view content, Sort tag, Sort currentSort,
+// `url` carries the page's full current state (search/arch/etc.); only "sort"/"order"/"mode"
+// are overridden here so other filters survive a sort-column click.
+std::string button(Url url, std::string_view content, Sort tag, Sort currentSort,
                    Order currentOrder);
 // Renders a row of filter pills ("All" plus one per value in `values`); the pill matching
-// `selected` (or "All" when empty) is highlighted, each links back to `path` with ?arch=<value>.
-std::string pillBar(std::string_view path, const std::set<std::string>& values,
-                    std::string_view selected);
+// `selected` (or "All" when empty) is highlighted. `url` carries the page's full current state
+// (sort/order/search/etc.); only "arch"/"mode" are overridden so other filters survive.
+std::string pillBar(Url url, const std::set<std::string>& values, std::string_view selected);
 std::string navItem(std::string_view name, std::string_view url, bool active);
 std::string link(std::string_view url, std::string_view content);
 

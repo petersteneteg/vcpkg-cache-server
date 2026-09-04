@@ -334,22 +334,22 @@ int main(int argc, char* argv[]) {
             }
         }));
 
-    const auto mode = [](const httplib::Request& req) -> site::Mode {
+    static constexpr auto mode = [](const httplib::Request& req) -> site::Mode {
         return fp::mGet(req.params, "mode")
             .and_then(enumTo<site::Mode>{})
             .value_or(site::Mode::Full);
     };
 
-    const auto sort = [](const httplib::Request& req) -> site::Sort {
+    static constexpr auto sort = [](const httplib::Request& req) -> site::Sort {
         return fp::mGet(req.params, "sort")
             .and_then(enumTo<site::Sort>{})
             .value_or(site::Sort::Default);
     };
-    const auto sortIdx = [](const httplib::Request& req) -> std::optional<size_t> {
+    static constexpr auto sortIdx = [](const httplib::Request& req) -> std::optional<size_t> {
         return fp::mGet(req.params, "sortidx").and_then(fp::strToNum<size_t>);
     };
 
-    const auto selection =
+    static constexpr auto selection =
         [](const httplib::Request& req) -> std::optional<std::pair<site::Sort, std::string>> {
         auto selCol = fp::mGet(req.params, "selcol").and_then(enumTo<site::Sort>{});
         auto selVal = fp::mGet(req.params, "selval");
@@ -360,23 +360,31 @@ int main(int argc, char* argv[]) {
         }
     };
 
-    const auto order = [](const httplib::Request& req) -> std::optional<site::Order> {
+    static constexpr auto order = [](const httplib::Request& req) -> std::optional<site::Order> {
         return fp::mGet(req.params, "order").and_then(enumTo<site::Order>{});
     };
-    const auto limit = [](const httplib::Request& req) -> site::Limit {
+    static constexpr auto limit = [](const httplib::Request& req) -> site::Limit {
         return {.offset = fp::mGet(req.params, "offset").and_then(fp::strToNum<size_t>),
                 .limit = fp::mGet(req.params, "limit").and_then(fp::strToNum<size_t>)};
     };
 
-    const auto search = [](const httplib::Request& req) -> std::string {
+    static constexpr auto search = [](const httplib::Request& req) -> std::string {
         return fp::mGet(req.params, "search").value_or(std::string{});
     };
 
-    const auto arch = [](const httplib::Request& req) -> std::string {
+    static constexpr auto arch = [](const httplib::Request& req) -> std::string {
         return fp::mGet(req.params, "arch").value_or(std::string{});
     };
 
-    const auto backCrumb =
+    static constexpr auto state = [](const httplib::Request& req) -> site::State {
+        return {.mode = mode(req),
+                .sort = sort(req),
+                .order = order(req).value_or(site::Order::Ascending),
+                .archFilter = arch(req),
+                .search = search(req)};
+    };
+
+    static constexpr auto backCrumb =
         [](const httplib::Request& req) -> std::optional<std::pair<std::string, std::string>> {
         auto label = fp::mGet(req.params, "backLabel");
         auto url = fp::mGet(req.params, "backUrl");
@@ -386,7 +394,7 @@ int main(int argc, char* argv[]) {
         return std::nullopt;
     };
 
-    const auto purgePattern = [](const httplib::Request& req) -> PurgePattern {
+    static constexpr auto purgePattern = [](const httplib::Request& req) -> PurgePattern {
         const auto nonEmpty = [](std::optional<std::string> v) -> std::optional<std::string> {
             if (v && !v->empty()) return v;
             return std::nullopt;
@@ -397,10 +405,19 @@ int main(int argc, char* argv[]) {
                             .arch = nonEmpty(fp::mGet(req.params, "arch"))};
     };
 
+    server->Get(R"(/list)", [&](const httplib::Request& req, httplib::Response& res) {
+        res.set_content(site::index(store, db, state(req)), "text/html");
+    });
+    server->Get("/index.html", [&](const httplib::Request& req, httplib::Response& res) {
+        res.set_content(site::index(store, db, state(req)), "text/html");
+    });
+    server->Get("/", [&](const httplib::Request& req, httplib::Response& res) {
+        res.set_content(site::index(store, db, state(req)), "text/html");
+    });
+
     server->Get("/status", [&](const httplib::Request& req, httplib::Response& res) {
         res.set_content(site::status(mode(req)), "text/html");
     });
-
     server->Get("/status/data", [](const httplib::Request&, httplib::Response& res) {
         res.set_content(site::statusData(), "text/html");
     });
@@ -417,20 +434,19 @@ int main(int argc, char* argv[]) {
         const auto sha = req.path_params.at("sha");
         res.set_content(site::compare(sha, store, mode(req)), "text/html");
     });
-    server->Get(R"(/list)", [&](const httplib::Request& req, httplib::Response& res) {
-        res.set_content(
-            site::index(store, db, mode(req), sort(req), order(req), search(req), arch(req)),
-            "text/html");
-    });
+
     server->Get(R"(/find/:package)", [&](const httplib::Request& req, httplib::Response& res) {
         const auto package = req.path_params.at("package");
-        res.set_content(
-            site::find(package, store, db, mode(req), sort(req), order(req), arch(req)),
-            "text/html");
+        res.set_content(site::find(package, store, db, state(req)), "text/html");
     });
     server->Get(R"(/package/:sha)", [&](const httplib::Request& req, httplib::Response& res) {
         const auto sha = req.path_params.at("sha");
         res.set_content(site::sha(sha, store, mode(req)), "text/html");
+    });
+    server->Get(R"(/downloads)", [&](const httplib::Request& req, httplib::Response& res) {
+        res.set_content(site::downloads(db, mode(req), sortIdx(req), order(req), limit(req),
+                                        selection(req), backCrumb(req)),
+                        "text/html");
     });
 
     server->Get("/purge", [&](const httplib::Request& req, httplib::Response& res) {
@@ -464,23 +480,7 @@ int main(int argc, char* argv[]) {
             res.set_content(site::purgeResult(result, mode(req)), "text/html");
         }));
 
-    server->Get(R"(/downloads)", [&](const httplib::Request& req, httplib::Response& res) {
-        res.set_content(
-            site::downloads(db, mode(req), sortIdx(req), order(req), limit(req), selection(req),
-                            backCrumb(req)),
-            "text/html");
-    });
 
-    server->Get("/index.html", [&](const httplib::Request& req, httplib::Response& res) {
-        res.set_content(
-            site::index(store, db, mode(req), sort(req), order(req), search(req), arch(req)),
-            "text/html");
-    });
-    server->Get("/", [&](const httplib::Request& req, httplib::Response& res) {
-        res.set_content(
-            site::index(store, db, mode(req), sort(req), order(req), search(req), arch(req)),
-            "text/html");
-    });
 
     server->Get("/favicon.svg", [&](const httplib::Request&, httplib::Response& res) {
         res.set_content(site::favicon(), "image/svg+xml");
