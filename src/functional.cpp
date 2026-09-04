@@ -95,13 +95,13 @@ std::optional<size_t> threadCount() {
 
 std::optional<size_t> memoryUsageBytes() {
 #if defined(__linux__)
-    struct rusage usage {};
+    struct rusage usage{};
     if (::getrusage(RUSAGE_SELF, &usage) == 0) {
         return static_cast<size_t>(usage.ru_maxrss) * 1024ULL;  // Linux: kB → bytes (peak RSS)
     }
     return std::nullopt;
 #elif defined(__APPLE__) || defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__)
-    struct rusage usage {};
+    struct rusage usage{};
     if (::getrusage(RUSAGE_SELF, &usage) == 0) {
         return static_cast<size_t>(usage.ru_maxrss);  // macOS/BSD: bytes (peak RSS)
     }

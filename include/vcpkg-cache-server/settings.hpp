@@ -40,6 +40,9 @@ struct Settings {
     std::string host = "0.0.0.0";
     std::optional<std::filesystem::path> logFile = std::nullopt;
 
+    /// Largest accepted request body. cpp-httplib defaults to 100MB which truncates large caches.
+    ByteSize maxPayloadSize{size_t{2} * 1024 * 1024 * 1024};
+
     Maintenance maintenance;
     ThreadPool threadPool;
 };

@@ -112,6 +112,13 @@ std::string generateConfigYaml(const Settings& settings) {
     }
     out += "\n";
 
+    // max_payload_size
+    out +=
+        "# Largest accepted upload body (supports suffixes: TB, GB, MB, kB). Uploads larger than\n"
+        "# this are rejected with 413 instead of being written truncated.\n";
+    out += fmt::format("max_payload_size: {}\n", formatByteSizeForYaml(settings.maxPayloadSize));
+    out += "\n";
+
     // ssl
     out +=
         "# SSL/TLS certificate and private key files; both must be provided together to enable "
@@ -237,6 +244,10 @@ void parseConfig(const std::filesystem::path& configFile, Settings& settings) {
 
     if (config["db_file"]) {
         settings.dbFile = std::filesystem::path{config["db_file"].as<std::string>()};
+    }
+
+    if (config["max_payload_size"]) {
+        settings.maxPayloadSize = config["max_payload_size"].as<ByteSize>();
     }
 
     if (config["ssl"]) {

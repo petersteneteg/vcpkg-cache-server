@@ -44,7 +44,10 @@ const Info* Store::info(std::string_view sha) {
 
         std::scoped_lock lock{smtx};
         auto [it, inserted] = infos.try_emplace(info.sha, InfoState::Valid, info);
-        return &it->second.second;
+        if (!inserted && it->second.first != InfoState::Writing) {
+            it->second = {InfoState::Valid, info};
+        }
+        return it->second.first == InfoState::Valid ? &it->second.second : nullptr;
     }
 
     return nullptr;
@@ -87,7 +90,7 @@ std::shared_ptr<StoreWriter> Store::write(std::string_view sha) {
         return nullptr;
     }
 
-    auto [it, inserted] = infos.try_emplace(std::string{sha}, InfoState::Valid, Info{});
+    auto [it, inserted] = infos.try_emplace(std::string{sha}, InfoState::Writing, Info{});
 
     return std::make_shared<StoreWriter>(*this, it->second, path, Token{});
 }
@@ -190,17 +193,31 @@ StoreWriter::StoreWriter(Store& store, std::pair<InfoState, Info>& infoItem,
 StoreWriter::~StoreWriter() {
     try {
         stream.close();
+        if (aborted) {
+            throw std::runtime_error(fmt::format("Incomplete upload of {}", path));
+        }
         if (!stream.good()) {
             throw std::runtime_error(fmt::format("Unable to close file {}", path));
         }
-        infoItem.second = extractInfo(path);
-        {
-            std::scoped_lock lock{store.smtx};
-            infoItem.first = InfoState::Valid;
-        }
+        auto info = extractInfo(path);
+        std::scoped_lock lock{store.smtx};
+        infoItem.second = std::move(info);
+        infoItem.first = InfoState::Valid;
     } catch (const std::exception& e) {
-        log::error(*store.logger, "Unable to close writer of: {} due to: {}", path, e.what());
+        log::error(*store.logger, "Discarding failed upload of: {} due to: {}", path, e.what());
+        discard();
     }
+}
+
+void StoreWriter::discard() {
+    std::error_code ec;
+    std::filesystem::remove(path, ec);
+    if (ec) {
+        log::error(*store.logger, "Unable to remove partial file {}: {}", path, ec.message());
+    }
+    std::scoped_lock lock{store.smtx};
+    infoItem.second = Info{};
+    infoItem.first = InfoState::Deleted;
 }
 
 }  // namespace vcache

@@ -116,11 +116,18 @@ public:
 
     std::ofstream& getStream() { return stream; }
 
+    /// Mark the upload as incomplete, the destructor will then discard the partial file.
+    void abort() { aborted = true; }
+    bool ok() const { return !aborted && stream.good(); }
+
 private:
+    void discard();
+
     Store& store;
     std::pair<InfoState, Info>& infoItem;
     std::filesystem::path path;
     std::ofstream stream;
+    bool aborted = false;
 };
 
 }  // namespace vcache
