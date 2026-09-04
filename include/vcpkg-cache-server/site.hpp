@@ -10,6 +10,7 @@
 #include <utility>
 #include <tuple>
 #include <map>
+#include <set>
 #include <ranges>
 
 #include <fmt/format.h>
@@ -58,7 +59,7 @@ std::string compare(std::string_view sha, const Store& store, Mode mode);
 std::string match(std::string_view abi, std::string_view package, const Store& store);
 std::string list(const Store& store);
 std::string find(std::string_view package, const Store& store, db::Database& db, Mode mode,
-                 Sort sort, std::optional<Order> order);
+                 Sort sort, std::optional<Order> order, std::string_view archFilter = {});
 std::string sha(std::string_view package, const Store& store, Mode mode);
 std::string favicon();
 std::string maskicon();
@@ -67,14 +68,19 @@ std::optional<std::pair<std::string, std::string>> script(std::string_view name)
 
 std::string downloads(db::Database& db, Mode mode, std::optional<size_t> sortIdx,
                       std::optional<Order> order, Limit limit,
-                      std::optional<std::pair<Sort, std::string>> selection);
+                      std::optional<std::pair<Sort, std::string>> selection,
+                      std::optional<std::pair<std::string, std::string>> back = std::nullopt);
 
 std::string index(const Store& store, db::Database& db, Mode mode, Sort sort,
-                  std::optional<Order> order, std::string_view search);
+                  std::optional<Order> order, std::string_view search,
+                  std::string_view archFilter = {});
 
 // Renders the purge form, and (when `pattern` selects at least one field) a paginated
 // preview of matching entries plus the equivalent curl command for the destructive POST.
-std::string purge(const PurgePattern& pattern, const Store& store, Limit limit, Mode mode);
+// `back`, when set, is an extra {label, url} breadcrumb entry inserted before "Purge" so the
+// page can link back to the find/package page it was reached from.
+std::string purge(const PurgePattern& pattern, const Store& store, Limit limit, Mode mode,
+                  std::optional<std::pair<std::string, std::string>> back = std::nullopt);
 std::string purgeResult(const PurgeResult& result, Mode mode);
 
 std::string statusData();
@@ -92,6 +98,10 @@ std::string formatDiff(const std::map<std::string, std::string>& dstMap,
 std::string formatMap(const std::map<std::string, std::string>& range);
 std::string button(std::string_view url, std::string_view content, Sort tag, Sort currentSort,
                    Order currentOrder);
+// Renders a row of filter pills ("All" plus one per value in `values`); the pill matching
+// `selected` (or "All" when empty) is highlighted, each links back to `path` with ?arch=<value>.
+std::string pillBar(std::string_view path, const std::set<std::string>& values,
+                    std::string_view selected);
 std::string navItem(std::string_view name, std::string_view url, bool active);
 std::string link(std::string_view url, std::string_view content);
 

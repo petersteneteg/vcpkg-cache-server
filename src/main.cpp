@@ -372,6 +372,20 @@ int main(int argc, char* argv[]) {
         return fp::mGet(req.params, "search").value_or(std::string{});
     };
 
+    const auto arch = [](const httplib::Request& req) -> std::string {
+        return fp::mGet(req.params, "arch").value_or(std::string{});
+    };
+
+    const auto backCrumb =
+        [](const httplib::Request& req) -> std::optional<std::pair<std::string, std::string>> {
+        auto label = fp::mGet(req.params, "backLabel");
+        auto url = fp::mGet(req.params, "backUrl");
+        if (label && url) {
+            return std::pair<std::string, std::string>{*label, *url};
+        }
+        return std::nullopt;
+    };
+
     const auto purgePattern = [](const httplib::Request& req) -> PurgePattern {
         const auto nonEmpty = [](std::optional<std::string> v) -> std::optional<std::string> {
             if (v && !v->empty()) return v;
@@ -404,13 +418,15 @@ int main(int argc, char* argv[]) {
         res.set_content(site::compare(sha, store, mode(req)), "text/html");
     });
     server->Get(R"(/list)", [&](const httplib::Request& req, httplib::Response& res) {
-        res.set_content(site::index(store, db, mode(req), sort(req), order(req), search(req)),
-                        "text/html");
+        res.set_content(
+            site::index(store, db, mode(req), sort(req), order(req), search(req), arch(req)),
+            "text/html");
     });
     server->Get(R"(/find/:package)", [&](const httplib::Request& req, httplib::Response& res) {
         const auto package = req.path_params.at("package");
-        res.set_content(site::find(package, store, db, mode(req), sort(req), order(req)),
-                        "text/html");
+        res.set_content(
+            site::find(package, store, db, mode(req), sort(req), order(req), arch(req)),
+            "text/html");
     });
     server->Get(R"(/package/:sha)", [&](const httplib::Request& req, httplib::Response& res) {
         const auto sha = req.path_params.at("sha");
@@ -418,7 +434,9 @@ int main(int argc, char* argv[]) {
     });
 
     server->Get("/purge", [&](const httplib::Request& req, httplib::Response& res) {
-        res.set_content(site::purge(purgePattern(req), store, limit(req), mode(req)), "text/html");
+        res.set_content(
+            site::purge(purgePattern(req), store, limit(req), mode(req), backCrumb(req)),
+            "text/html");
     });
     server->Post(
         "/purge",
@@ -448,17 +466,20 @@ int main(int argc, char* argv[]) {
 
     server->Get(R"(/downloads)", [&](const httplib::Request& req, httplib::Response& res) {
         res.set_content(
-            site::downloads(db, mode(req), sortIdx(req), order(req), limit(req), selection(req)),
+            site::downloads(db, mode(req), sortIdx(req), order(req), limit(req), selection(req),
+                            backCrumb(req)),
             "text/html");
     });
 
     server->Get("/index.html", [&](const httplib::Request& req, httplib::Response& res) {
-        res.set_content(site::index(store, db, mode(req), sort(req), order(req), search(req)),
-                        "text/html");
+        res.set_content(
+            site::index(store, db, mode(req), sort(req), order(req), search(req), arch(req)),
+            "text/html");
     });
     server->Get("/", [&](const httplib::Request& req, httplib::Response& res) {
-        res.set_content(site::index(store, db, mode(req), sort(req), order(req), search(req)),
-                        "text/html");
+        res.set_content(
+            site::index(store, db, mode(req), sort(req), order(req), search(req), arch(req)),
+            "text/html");
     });
 
     server->Get("/favicon.svg", [&](const httplib::Request&, httplib::Response& res) {

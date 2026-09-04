@@ -241,6 +241,37 @@ std::string button(std::string_view url, std::string_view content, Sort tag, Sor
     return fmt::format(str, url, tag, newOrder, content, indicator);
 }
 
+std::string pillBar(std::string_view path, const std::set<std::string>& values,
+                    std::string_view selected) {
+    static constexpr std::string_view str = R"(
+        <a class="badge rounded-pill text-bg-{0} pointer text-decoration-none me-1"
+           hx-get="{1}"
+           hx-target="#content" 
+           hx-swap="innerHTML" 
+           hx-push-url="{2}">
+            {3}
+        </a>
+    )";
+
+    const auto pill = [&](std::string_view label, std::string_view value, bool active) {
+        Url plainUrl{.path = std::string{path}, .params = {{"mode", "plain"}}};
+        Url fullUrl{.path = std::string{path}, .params = {}};
+        if (!value.empty()) {
+            plainUrl.params["arch"] = std::string{value};
+            fullUrl.params["arch"] = std::string{value};
+        }
+        return fmt::format(str, active ? "primary" : "secondary", plainUrl, fullUrl, label);
+    };
+
+    std::string buff = R"(<div class="d-flex flex-wrap gap-1 my-2">)";
+    buff += pill("All", "", selected.empty());
+    for (const auto& value : values) {
+        buff += pill(value, value, value == selected);
+    }
+    buff += "</div>";
+    return buff;
+}
+
 std::string navItem(std::string_view name, std::string_view url, bool active) {
     static constexpr std::string_view str = R"(
         <li class="breadcrumb-item">
@@ -368,11 +399,17 @@ std::string buttonIdx(Url url, std::string_view content, size_t sortIdx, size_t 
     return fmt::format(str, plainUrl, fullUrl, content, indicator);
 }
 
-std::string downloadsLink(Params params) {
+std::string downloadsLink(Params params, std::optional<std::pair<std::string, std::string>> back = std::nullopt) {
     Url purl{.path = "/downloads", .params = {{"mode", "plain"}}};
     Url furl{.path = "/downloads", .params = {{"mode", "full"}}};
     purl.params.insert_range(params);
     furl.params.insert_range(params);
+    if (back) {
+        purl.params["backLabel"] = back->first;
+        purl.params["backUrl"] = back->second;
+        furl.params["backLabel"] = back->first;
+        furl.params["backUrl"] = back->second;
+    }
 
     constexpr std::string_view str = R"(
         <div class="d-inline-block float-end fs-4 me-3">
@@ -390,11 +427,17 @@ std::string downloadsLink(Params params) {
     return fmt::format(str, purl, furl);
 }
 
-std::string purgeLink(Params params) {
+std::string purgeLink(Params params, std::optional<std::pair<std::string, std::string>> back = std::nullopt) {
     Url purl{.path = "/purge", .params = {{"mode", "plain"}}};
     Url furl{.path = "/purge", .params = {{"mode", "full"}}};
     purl.params.insert_range(params);
     furl.params.insert_range(params);
+    if (back) {
+        purl.params["backLabel"] = back->first;
+        purl.params["backUrl"] = back->second;
+        furl.params["backLabel"] = back->first;
+        furl.params["backUrl"] = back->second;
+    }
 
     constexpr std::string_view str = R"(
         <div class="d-inline-block float-end fs-4 me-3">
@@ -468,14 +511,20 @@ decltype(auto) getRowItem() {
 }
 
 std::string index(const Store& store, db::Database& db, Mode mode, Sort sort,
-                  std::optional<Order> maybeOrder, std::string_view search) {
+                  std::optional<Order> maybeOrder, std::string_view search,
+                  std::string_view archFilter) {
     const auto order = maybeOrder.value_or(Order::Ascending);
     const auto keys =
         store.allInfos() | std::views::transform(&Info::package) | std::ranges::to<std::set>();
+    const auto archs =
+        store.allInfos() | std::views::transform(&Info::arch) | std::ranges::to<std::set>();
 
     std::map<std::string, std::vector<const Info*>> packages;
-    std::ranges::for_each(store.allInfos(),
-                          [&](const Info& info) { packages[info.package].push_back(&info); });
+    std::ranges::for_each(store.allInfos(), [&](const Info& info) {
+        if (archFilter.empty() || info.arch == archFilter) {
+            packages[info.package].push_back(&info);
+        }
+    });
 
     rapidfuzz::fuzz::CachedPartialRatio<char> scorer(search);
     auto list = packages | std::views::transform([&](const auto& package) -> RowItem {
@@ -510,8 +559,7 @@ std::string index(const Store& store, db::Database& db, Mode mode, Sort sort,
                 }
             }
         }...};
-    }
-    (std::make_integer_sequence<size_t, std::to_underlying(Sort::NumSortMethods)>());
+    }(std::make_integer_sequence<size_t, std::to_underlying(Sort::NumSortMethods)>());
 
     table[std::to_underlying(sort)](list, order);
 
@@ -520,27 +568,39 @@ std::string index(const Store& store, db::Database& db, Mode mode, Sort sort,
     }
 
     static constexpr std::string_view itemStr = R"(
-        <div class="row">
-            <div class="col">
-                <button class="btn btn-link btn-sm"
-                        hx-get="/find/{0}?mode=plain" hx-target="#content" 
-                        hx-swap="innerHTML" hx-push-url="/find/{0}">
+        <tr>
+            <td>
+               <a class="pointer link-underline 
+                        link-offset-2-hover 
+                        link-underline-opacity-0 
+                        link-underline-opacity-75-hover" 
+                  hx-get="{7}"
+                  hx-target="#content" 
+                  hx-swap="innerHTML"
+                  hx-push-url="{8}">
                     <b>{0}</b>
-                </button>
-            </div>
-            <div class="col">{1}</div>
-            <div class="col">{2:M}</div>
-            <div class="col">{3}</div>
-            <div class="col">{4:%Y-%m-%d %H:%M}</div>
-            <div class="col">{5:%Y-%m-%d %H:%M}</div>
-            <div class="col">{6:%Y-%m-%d %H:%M}</div>
-        </div>
+                </a>
+            </td>
+            <td>{1}</td>
+            <td>{2:M}</td>
+            <td>{3}</td>
+            <td>{4:%Y-%m-%d %H:%M}</td>
+            <td>{5:%Y-%m-%d %H:%M}</td>
+            <td>{6:%Y-%m-%d %H:%M}</td>
+        </tr>
     )";
 
     const auto str =
         list | std::views::transform([&](const RowItem& item) {
+            Url plainUrl{.path = fmt::format("/find/{}", item.name), .params = {{"mode", "plain"}}};
+            Url fullUrl{.path = fmt::format("/find/{}", item.name), .params = {}};
+            if (!archFilter.empty()) {
+                plainUrl.params["arch"] = std::string{archFilter};
+                fullUrl.params["arch"] = std::string{archFilter};
+            }
             return fmt::format(itemStr, item.name, item.count, ByteSize{item.diskSize},
-                               item.downloads, item.lastUse, item.firstTime, item.lastTime);
+                               item.downloads, item.lastUse, item.firstTime, item.lastTime,
+                               plainUrl, fullUrl);
         }) |
         std::views::join | std::ranges::to<std::string>();
 
@@ -563,23 +623,25 @@ std::string index(const Store& store, db::Database& db, Mode mode, Sort sort,
     const auto lastButton = detail::button("/", "Last Cache", Sort::Last, sort, order);
 
     const auto headerRow = fmt::format(R"(
-            <div class="row">
-                <div class="col">{}</div>
-                <div class="col">{}</div>
-                <div class="col">{}</div>
-                <div class="col">{}</div>
-                <div class="col">{}</div>
-                <div class="col">{}</div>
-                <div class="col">{}</div>
-            </div>
+            <tr>
+                <th>{}</th>
+                <th>{}</th>
+                <th>{}</th>
+                <th>{}</th>
+                <th>{}</th>
+                <th>{}</th>
+                <th>{}</th>
+            </tr>
             )",
                                        nameButton, countButton, sizeButton, downloadsButton,
                                        useButton, firstButton, lastButton);
 
     const auto nav = detail::nav({{"Packages", "/"}});
+    const auto archPills = detail::pillBar("/", archs, archFilter);
 
     static constexpr std::string_view html = R"(
         <div>{0}{1}</div>
+        {6}
         <input class="form-control"
                id="search"
                type="search"
@@ -593,13 +655,16 @@ std::string index(const Store& store, db::Database& db, Mode mode, Sort sort,
                hx-indicator=".htmx-indicator">
         <h4>{3}</h4>
         <span class="htmx-indicator">Searching...</span>
-        <div class="container text-left align-middle">
-            {4}
-            {5}
+        <div class="table-responsive">
+            <table class="table table-hover table-sm align-middle">
+                <thead>{4}</thead>
+                <tbody>{5}</tbody>
+            </table>
         </div>
     )";
-    const auto content = fmt::format(html, nav, fmt::format("{}{}", purgeLink({}), downloadsLink({})),
-                                     search, stats, headerRow, str);
+    const auto content =
+        fmt::format(html, nav, fmt::format("{}{}", purgeLink({}), downloadsLink({})), search, stats,
+                    headerRow, str, archPills);
 
     return detail::deliver(content, mode);
 }
@@ -608,33 +673,34 @@ namespace {
 
 std::string purgeRow(const Info& info) {
     static constexpr std::string_view itemStr = R"(
-        <div class="row">
-            <div class="col">{0}</div>
-            <div class="col">{1}</div>
-            <div class="col">{2}</div>
-            <div class="col"><pre>{3}</pre></div>
-            <div class="col">{4}</div>
-            <div class="col">{5:%Y-%m-%d %H:%M}</div>
-        </div>
+        <tr>
+            <td>{0}</td>
+            <td>{1}</td>
+            <td>{2}</td>
+            <td><pre>{3}</pre></td>
+            <td>{4}</td>
+            <td>{5:%Y-%m-%d %H:%M}</td>
+        </tr>
     )";
     return fmt::format(itemStr, info.package, info.version, info.arch, info.sha.substr(0, 15),
                        ByteSize{info.size}, info.time);
 }
 
 constexpr std::string_view purgeTableHeader = R"(
-    <div class="row fw-bold">
-        <div class="col">Package</div>
-        <div class="col">Version</div>
-        <div class="col">Arch</div>
-        <div class="col">SHA</div>
-        <div class="col">Size</div>
-        <div class="col">Created</div>
-    </div>
+    <tr>
+        <th>Package</th>
+        <th>Version</th>
+        <th>Arch</th>
+        <th>SHA</th>
+        <th>Size</th>
+        <th>Created</th>
+    </tr>
 )";
 
 }  // namespace
 
-std::string purge(const PurgePattern& pattern, const Store& store, Limit limit, Mode mode) {
+std::string purge(const PurgePattern& pattern, const Store& store, Limit limit, Mode mode,
+                  std::optional<std::pair<std::string, std::string>> back) {
     Url purgeUrl{.path = "/purge", .params = {}};
     if (pattern.sha) purgeUrl.params["sha"] = *pattern.sha;
     if (pattern.package) purgeUrl.params["package"] = *pattern.package;
@@ -681,7 +747,8 @@ std::string purge(const PurgePattern& pattern, const Store& store, Limit limit, 
             }
 
             previewSection = fmt::format(
-                R"(<h5>{} matching entries, {} (showing {}-{})</h5><div class="container text-left align-middle">{}{}</div>{})",
+                R"(<h5>{} matching entries, {} (showing {}-{})</h5>)"
+                R"(<div class="table-responsive"><table class="table table-hover table-sm align-middle"><thead>{}</thead><tbody>{}</tbody></table></div>{})",
                 totalMatches, ByteSize{totalSize}, offset + 1, offset + count, purgeTableHeader,
                 rows, pager);
 
@@ -747,7 +814,12 @@ std::string purge(const PurgePattern& pattern, const Store& store, Limit limit, 
                                   pattern.version.value_or(""), pattern.arch.value_or(""), purgeUrl,
                                   totalMatches, disabledAttr);
 
-    const auto nav = detail::nav({{"Packages", "/"}, {"Purge", "/purge"}});
+    std::vector<std::pair<std::string, std::string>> navPath{{"Packages", "/"}};
+    if (back) {
+        navPath.push_back(*back);
+    }
+    navPath.emplace_back("Purge", "/purge");
+    const auto nav = detail::nav(navPath);
     const auto content = fmt::format(R"(<div>{}</div><h4>Purge Caches</h4>{}{}{})", nav, form,
                                      previewSection, curlSection);
 
@@ -767,8 +839,9 @@ std::string purgeResult(const PurgeResult& result, Mode mode) {
 
     const auto nav = detail::nav({{"Packages", "/"}, {"Purge", "/purge"}});
     const auto content = fmt::format(
-        R"(<div>{}</div><h4>{}</h4><div class="container text-left align-middle">{}{}</div>)", nav,
-        heading, purgeTableHeader, rows);
+        R"(<div>{}</div><h4>{}</h4><div class="table-responsive">)"
+        R"(<table class="table table-hover table-sm align-middle"><thead>{}</thead><tbody>{}</tbody></table></div>)",
+        nav, heading, purgeTableHeader, rows);
 
     return detail::deliver(content, mode);
 }
@@ -866,11 +939,18 @@ decltype(auto) getCacheItem() {
 }
 
 std::string find(std::string_view package, const Store& store, db::Database& db, Mode mode,
-                 Sort sort, std::optional<Order> maybeOrder) {
+                 Sort sort, std::optional<Order> maybeOrder, std::string_view archFilter) {
     const auto order = maybeOrder.value_or(Order::Ascending);
 
-    auto list = store.allInfos() |
-                std::views::filter([&](const auto& info) { return info.package == package; }) |
+    const auto matchesPackage = [&](const auto& info) { return info.package == package; };
+
+    const auto archs = store.allInfos() | std::views::filter(matchesPackage) |
+                       std::views::transform(&Info::arch) | std::ranges::to<std::set>();
+
+    auto list = store.allInfos() | std::views::filter(matchesPackage) |
+                std::views::filter([&](const auto& info) {
+                    return archFilter.empty() || info.arch == archFilter;
+                }) |
                 std::views::transform([&](const auto& info) -> CacheItem {
                     const auto [downloads, lastUse] = db::getCacheDownloadsAndLastUse(db, info.sha);
                     return {.version = info.version,
@@ -883,9 +963,6 @@ std::string find(std::string_view package, const Store& store, db::Database& db,
                 }) |
                 std::ranges::to<std::vector>();
 
-    const auto archs = list | std::views::transform(&CacheItem::arch) | std::ranges::to<std::set>();
-    // Todo make selectable
-
     constexpr auto table = []<size_t... Is>(std::integer_sequence<size_t, Is...>) {
         return std::array{+[](decltype(list)& list, Order order) {
             auto proj = getCacheItem<static_cast<Sort>(Is)>();
@@ -895,11 +972,10 @@ std::string find(std::string_view package, const Store& store, db::Database& db,
                 std::ranges::sort(list, std::greater<>{}, proj);
             }
         }...};
-    }
-    (std::make_integer_sequence<size_t, std::to_underlying(Sort::NumSortMethods)>());
+    }(std::make_integer_sequence<size_t, std::to_underlying(Sort::NumSortMethods)>());
     table[std::to_underlying(sort)](list, order);
 
-    const auto path = fmt::format("/find/{0}?mode=plain", package);
+    const auto path = fmt::format("/find/{0}", package);
     const auto versionButton = detail::button(path, "Version", Sort::Version, sort, order);
     const auto archButton = detail::button(path, "Arch", Sort::Arch, sort, order);
     const auto sizeButton = detail::button(path, "Size", Sort::Size, sort, order);
@@ -909,45 +985,53 @@ std::string find(std::string_view package, const Store& store, db::Database& db,
     const auto shaButton = detail::button(path, "SHA", Sort::SHA, sort, order);
 
     const auto headerRow = fmt::format(R"(
-            <div class="row">
-                <div class="col">{}</div>
-                <div class="col">{}</div>
-                <div class="col">{}</div>
-                <div class="col">{}</div>
-                <div class="col">{}</div>
-                <div class="col">{}</div>
-                <div class="col">{}</div>
-                <div class="col"></div>
-            </div>
+            <tr>
+                <th>{}</th>
+                <th>{}</th>
+                <th>{}</th>
+                <th>{}</th>
+                <th>{}</th>
+                <th>{}</th>
+                <th>{}</th>
+                <th></th>
+            </tr>
             )",
                                        versionButton, archButton, sizeButton, downloadsButton,
                                        useButton, firstButton, shaButton);
 
     static constexpr std::string_view itemStr = R"(
-        <div class="row">
-            <div class="col">{0}</div>
-            <div class="col">{1}</div>
-            <div class="col">{2}</div>
-            <div class="col">{3}</div>
-            <div class="col">{4:%Y-%m-%d %H:%M}</div>
-            <div class="col">{5:%Y-%m-%d %H:%M}</div>
-            <div class="col">
-                <button hx-get="/package/{6}?mode=plain" 
-                        hx-target="#content"
-                        hx-swap="innerHTML"  
-                        hx-push-url="/package/{6}"> 
-                    <pre>{7}</pre>
-                </button>
-            </div>
-            <div class="col">
-                <button hx-get="/compare/{6}?mode=plain" 
-                        hx-target="#content"
-                        hx-swap="innerHTML" 
-                        hx-push-url="/compare/{6}">
+        <tr>
+            <td>{0}</td>
+            <td>{1}</td>
+            <td>{2}</td>
+            <td>{3}</td>
+            <td>{4:%Y-%m-%d %H:%M}</td>
+            <td>{5:%Y-%m-%d %H:%M}</td>
+            <td>
+                <a class="pointer link-underline 
+                         link-offset-2-hover 
+                         link-underline-opacity-0 
+                         link-underline-opacity-75-hover"
+                   hx-get="/package/{6}?mode=plain" 
+                   hx-target="#content"
+                   hx-swap="innerHTML"  
+                   hx-push-url="/package/{6}"> 
+                    {7}
+                </a>
+            </td>
+            <td>
+                <a class="pointer link-underline 
+                          link-offset-2-hover 
+                          link-underline-opacity-0 
+                          link-underline-opacity-75-hover"
+                   hx-get="/compare/{6}?mode=plain" 
+                   hx-target="#content"
+                   hx-swap="innerHTML" 
+                   hx-push-url="/compare/{6}">
                     Compare
-                </button>
-            </div>
-        </div>
+                </a>
+            </td>
+        </tr>
     )";
 
     const auto str = list | std::views::transform([&](const CacheItem& item) {
@@ -957,22 +1041,22 @@ std::string find(std::string_view package, const Store& store, db::Database& db,
                      }) |
                      std::views::join | std::ranges::to<std::string>();
 
-    const auto sizes =
-        store.allInfos() |
-        std::views::filter([&](const auto& info) { return info.package == package; }) |
-        std::views::transform(&Info::size) | std::ranges::to<std::vector>();
+    const auto count = list.size();
+    const auto diskSize = std::ranges::fold_left(
+        list | std::views::transform(&CacheItem::diskSize), size_t{0}, std::plus<>{});
 
-    const auto count = sizes.size();
-    const auto diskSize = std::accumulate(sizes.begin(), sizes.end(), size_t{0}, std::plus<>());
-
+    const auto backCrumb =
+        std::pair<std::string, std::string>{std::string{package}, fmt::format("/find/{}", package)};
     const auto nav =
         detail::nav({{"Packages", "/"}, {std::string{package}, fmt::format("/find/{}", package)}});
     const auto content =
-        fmt::format(R"(<div>{}{}{}</div><h4>Count: {}, Total Size: {}</h4>)"
-                    R"(<div class="container text-left align-middle">{}{}</div>)",
-                    nav, purgeLink({{"package", std::string{package}}}),
-                    downloadsLink({{"selcol", "name"}, {"selval", std::string{package}}}), count,
-                    ByteSize{diskSize}, headerRow, str);
+        fmt::format(
+            R"(<div>{}{}{}</div>{}<h4>Count: {}, Total Size: {}</h4>)"
+            R"(<div class="table-responsive"><table class="table table-hover table-sm align-middle">)"
+            R"(<thead>{}</thead><tbody>{}</tbody></table></div>)",
+            nav, purgeLink({{"package", std::string{package}}}, backCrumb),
+            downloadsLink({{"selcol", "name"}, {"selval", std::string{package}}}, backCrumb),
+            detail::pillBar(path, archs, archFilter), count, ByteSize{diskSize}, headerRow, str);
 
     return detail::deliver(content, mode);
 }
@@ -989,9 +1073,11 @@ std::string sha(std::string_view sha, const Store& store, Mode mode) {
                      {info->package, fmt::format("/find/{}", info->package)},
                      {info->sha.substr(0, 16), fmt::format("/package/{}", info->sha)}});
 
+    const auto backCrumb = std::pair<std::string, std::string>{
+        std::string{info->sha.substr(0, 16)}, fmt::format("/package/{}", info->sha)};
     return detail::deliver(
-        fmt::format("<div>{}{}{}</div>{}", nav, purgeLink({{"sha", info->sha}}),
-                    downloadsLink({{"selcol", "sha"}, {"selval", info->sha}}), finfo),
+        fmt::format("<div>{}{}{}</div>{}", nav, purgeLink({{"sha", info->sha}}, backCrumb),
+                    downloadsLink({{"selcol", "sha"}, {"selval", info->sha}}, backCrumb), finfo),
         mode);
 }
 
@@ -1043,7 +1129,8 @@ auto executeQueary(db::Database& db, auto& cols, auto& orderBy, Limit limits,
 
 std::string downloads(db::Database& db, Mode mode, std::optional<size_t> sortIdx,
                       std::optional<Order> order, Limit limits,
-                      std::optional<std::pair<Sort, std::string>> selection) {
+                      std::optional<std::pair<Sort, std::string>> selection,
+                      std::optional<std::pair<std::string, std::string>> back) {
 
     using namespace sqlite_orm;
 
@@ -1057,14 +1144,11 @@ std::string downloads(db::Database& db, Mode mode, std::optional<size_t> sortIdx
             auto item = order_by(std::get<Is>(cols.columns));
             ordering.push_back(setOrder(item, order));
         }...};
-    }
-    (std::make_integer_sequence<size_t, cols.count>());
+    }(std::make_integer_sequence<size_t, cols.count>());
     table[sortIdx.value_or(size_t{0})](orderBy, cols, order.value_or(Order::Descending));
 
     auto [data, names] = executeQueary(db, cols, orderBy, limits, selection);
 
-    constexpr std::array<std::string_view, cols.count> widths{"",   "",   "-1", "",
-                                                              "-1", "-1", "",   "-1"};
     names[6] = "age";
 
     Url url{.path = "/downloads", .params = {}};
@@ -1072,29 +1156,32 @@ std::string downloads(db::Database& db, Mode mode, std::optional<size_t> sortIdx
         url.params["selcol"] = fmt::to_string(selection->first);
         url.params["selval"] = selection->second;
     }
+    if (back) {
+        url.params["backLabel"] = back->first;
+        url.params["backUrl"] = back->second;
+    }
 
     const auto header = [&]<size_t... Is>(std::integer_sequence<size_t, Is...>) {
         return std::array{[&]() {
             const auto button = buttonIdx(url, names[Is], Is, sortIdx.value_or(size_t{0}),
                                           order.value_or(Order::Descending));
-            return fmt::format(R"(<div class="col{}">{}</div>)", widths[Is], button);
+            return fmt::format(R"(<th>{}</th>)", button);
         }()...};
-    }
-    (std::make_integer_sequence<size_t, cols.count>());
-    const auto headerRow = fmt::format(R"(<div class="row">{}</div>)",
-                                       header | std::views::join | std::ranges::to<std::string>());
+    }(std::make_integer_sequence<size_t, cols.count>());
+    const auto headerRow =
+        fmt::format(R"(<tr>{}</tr>)", header | std::views::join | std::ranges::to<std::string>());
 
     static constexpr std::string_view itemStr = R"(
-        <div class="row" {8}>
-            <div class="col">{0:%Y-%m-%d %H:%M}</div>
-            <div class="col">{1}</div>
-            <div class="col-1">{2}</div>
-            <div class="col">{3}</div>
-            <div class="col-1">{4}</div>
-            <div class="col-1">{5}</div>
-            <div class="col">{6}</div>
-            <div class="col-1">{7}</div>
-        </div>
+        <tr {8}>
+            <td>{0:%Y-%m-%d %H:%M}</td>
+            <td>{1}</td>
+            <td>{2}</td>
+            <td>{3}</td>
+            <td>{4}</td>
+            <td>{5}</td>
+            <td>{6}</td>
+            <td>{7}</td>
+        </tr>
         )";
 
     auto turl = url;
@@ -1124,9 +1211,17 @@ std::string downloads(db::Database& db, Mode mode, std::optional<size_t> sortIdx
         return str;
     }
 
-    const auto content = fmt::format(R"(<h4>Downloads</h4>)"
-                                     R"(<div class="container text-left align-middle">{}{}</div>)",
-                                     headerRow, str);
+    std::vector<std::pair<std::string, std::string>> navPath{{"Packages", "/"}};
+    if (back) {
+        navPath.push_back(*back);
+    }
+    navPath.emplace_back("Downloads", "/downloads");
+    const auto nav = detail::nav(navPath);
+    const auto content = fmt::format(R"(<div>{}</div><h4>Downloads</h4>)"
+                                     R"(<div class="table-responsive">)"
+                                     R"(<table class="table table-hover table-sm align-middle">)"
+                                     R"(<thead>{}</thead><tbody>{}</tbody></table></div>)",
+                                     nav, headerRow, str);
 
     return detail::deliver(content, mode);
 }
