@@ -199,6 +199,9 @@ int main(int argc, char* argv[]) {
 
     auto server = createServer(settings.certAndKey);
 
+    log::info(*logger, "Max payload size: {}", settings.maxPayloadSize);
+    server->set_payload_max_length(std::to_underlying(settings.maxPayloadSize));
+
     if (settings.threadPool.baseThreads || settings.threadPool.maxThreads ||
         settings.threadPool.maxQueuedRequests) {
         const auto baseThreads = settings.threadPool.baseThreads.value_or(std::max(
@@ -280,10 +283,35 @@ int main(int argc, char* argv[]) {
             const auto sha = req.matches[1].str();
 
             if (auto writer = store.write(sha)) {
-                content_reader([writer](const char* data, size_t data_length) {
+                size_t received = 0;
+                const auto complete = content_reader([&](const char* data, size_t data_length) {
                     writer->getStream().write(data, data_length);
-                    return true;
+                    received += data_length;
+                    return writer->getStream().good();
                 });
+
+                if (!complete || !writer->ok()) {
+                    writer->abort();
+                    writer.reset();
+
+                    const auto expected =
+                        fp::mGet(req.headers, "Content-Length").and_then(fp::strToNum<size_t>);
+                    const auto tooLarge =
+                        expected.value_or(received) > std::to_underlying(settings.maxPayloadSize);
+
+                    log::error(
+                        *logger, "{:5} {:15} Incomplete upload, got {} of {}, limit {}, sha {}",
+                        req.method, req.remote_addr, ByteSize{received},
+                        expected.transform([](size_t s) { return fmt::format("{}", ByteSize{s}); })
+                            .value_or("?"),
+                        settings.maxPayloadSize, sha);
+
+                    res.status = tooLarge ? httplib::StatusCode::PayloadTooLarge_413
+                                          : httplib::StatusCode::BadRequest_400;
+                    return;
+                }
+
+                // closes the file and populates the store entry
             } else {
                 res.status = httplib::StatusCode::Conflict_409;
                 return;
@@ -301,7 +329,8 @@ int main(int argc, char* argv[]) {
                                   .size = info->size});
 
             } else {
-                log::warn(*logger, "Expected to find a new package at {}", sha);
+                log::warn(*logger, "Uploaded cache {} was rejected, not a valid vcpkg zip", sha);
+                res.status = httplib::StatusCode::BadRequest_400;
             }
         }));
 
