@@ -131,6 +131,7 @@ if(VCACHE_BUILD_TESTS)
             tests/test_database.cpp
             tests/test_settings.cpp
             tests/test_purge.cpp
+            tests/test_maintenance.cpp
     )
     target_link_libraries(vcpkg-cache-server-tests
         PUBLIC

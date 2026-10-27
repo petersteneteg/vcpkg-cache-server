@@ -40,6 +40,11 @@ void maintain(Store& store, db::Database& db, const Maintenance& maintenance,
     {
         using namespace sqlite_orm;
         log::info(*logger, "[Maintain] Running sanity checks");
+        for (auto& cache : db.iterate<db::Cache>(where(c(&db::Cache::deleted) == true))) {
+            if (store.exists(cache.sha)) {
+                allRemoved += removeCache(cache, db, toDelete, logger);
+            }
+        }
         for (auto& cache : db.iterate<db::Cache>(
                  where(and_(c(&db::Cache::deleted) == false, c(&db::Cache::size) == 0)))) {
 
@@ -138,6 +143,8 @@ void maintain(Store& store, db::Database& db, const Maintenance& maintenance,
                               ByteSize(overflow));
                     return overflow;
                 } else {
+                    log::info(*logger, "[Maintain] Total Cache size {} with given max {}",
+                              ByteSize{static_cast<size_t>(totalSize)}, ByteSize{max});
                     return std::nullopt;
                 }
             })
