@@ -128,6 +128,26 @@ TEST_CASE("addCache preserves all fields", "[database]") {
     CHECK(retrieved.deleted == false);
 }
 
+TEST_CASE("addCache revives a deleted cache entry instead of inserting", "[database]") {
+    auto db = createTestDb();
+    int pkgId = getOrAddPackageId(db, "fmt");
+
+    auto first = addCache(db, Cache{.sha = "sha1", .package = pkgId, .size = 100});
+    auto row = db.get<Cache>(first.id);
+    row.deleted = true;
+    row.downloads = 3;
+    db.update(row);
+
+    auto second = addCache(db, Cache{.sha = "sha1", .package = pkgId, .size = 200});
+
+    CHECK(second.id == first.id);
+    CHECK(db.count<Cache>() == 1);
+    auto retrieved = db.get<Cache>(first.id);
+    CHECK_FALSE(retrieved.deleted);
+    CHECK(retrieved.size == 200);
+    CHECK(retrieved.downloads == 3);
+}
+
 // ============================================================================
 // addDownload
 // ============================================================================

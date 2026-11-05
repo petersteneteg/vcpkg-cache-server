@@ -130,6 +130,16 @@ inline std::optional<int> getCacheId(Database& db, std::string_view sha) {
 }
 
 inline Cache addCache(Database& db, Cache&& cache) {
+    // A previously removed cache keeps its row (sha is unique), so revive it instead of inserting.
+    if (const auto existing = getCacheId(db, cache.sha)) {
+        auto row = db.get<Cache>(*existing);
+        cache.id = row.id;
+        cache.lastUsed = row.lastUsed;
+        cache.downloads = row.downloads;
+        db.update(cache);
+        return std::move(cache);
+    }
+
     auto id = db.insert(cache);
     cache.id = id;
     return std::move(cache);

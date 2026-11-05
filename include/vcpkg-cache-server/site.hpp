@@ -50,8 +50,8 @@ struct Limit {
 
 using Params = std::map<std::string, std::string>;
 struct Url {
-    std::string path;
-    Params params;
+    std::string path = {};
+    Params params = {};
 };
 
 // A breadcrumb entry: {label, url}.
