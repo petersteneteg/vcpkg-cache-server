@@ -22,6 +22,17 @@ size_t removeCache(const db::Cache& cache, db::Database& db, std::vector<std::st
     return cache.size;
 }
 
+// Effective last activity of a cache: the latest of lastUsed and created. The lastUsed
+// sentinel -1 must be handled explicitly since real file_clock timestamps can be negative
+// (on libstdc++ the epoch is in the future), making -1 "newer" than any real timestamp.
+inline auto effectiveLastUse() {
+    using namespace sqlite_orm;
+    return case_<db::Rep>()
+        .when(c(&db::Cache::lastUsed) == -1, then(&db::Cache::created))
+        .else_(max(&db::Cache::lastUsed, &db::Cache::created))
+        .end();
+}
+
 }  // namespace detail
 
 void maintain(Store& store, db::Database& db, const Maintenance& maintenance,
@@ -85,9 +96,11 @@ void maintain(Store& store, db::Database& db, const Maintenance& maintenance,
                 log::info(*logger, "[Maintain] Looking for packages not used after: {} ({})",
                           cutoff, FormatDuration{maxUnused});
                 size_t removed{};
-                for (auto& cache : db.iterate<db::Cache>(where(
-                         and_(c(&db::Cache::deleted) == false,
-                              c(&db::Cache::lastUsed) < cutoff.time_since_epoch().count())))) {
+                // Never-used caches have lastUsed == -1, fall back to their creation time.
+                for (auto& cache : db.iterate<db::Cache>(
+                         where(and_(c(&db::Cache::deleted) == false,
+                                    less_than(detail::effectiveLastUse(),
+                                              cutoff.time_since_epoch().count()))))) {
 
                     removed += removeCache(cache, db, toDelete, logger);
                 }
@@ -115,11 +128,12 @@ void maintain(Store& store, db::Database& db, const Maintenance& maintenance,
 
                     const auto overflow = size - std::to_underlying(max);
                     size_t removed{};
-                    for (auto& cache :
-                         db.iterate<db::Cache>(where(and_(c(&db::Cache::package) == pid,
-                                                          c(&db::Cache::deleted) == false)),
-                                               multi_order_by(order_by(&db::Cache::lastUsed),
-                                                              order_by(&db::Cache::created)))) {
+                    // Evict by effective last activity; never-used caches (lastUsed == -1)
+                    // fall back to their creation time.
+                    for (auto& cache : db.iterate<db::Cache>(
+                             where(and_(c(&db::Cache::package) == pid,
+                                        c(&db::Cache::deleted) == false)),
+                             order_by(detail::effectiveLastUse()))) {
                         removed += removeCache(cache, db, toDelete, logger);
                         if (removed > overflow) break;
                     }
@@ -152,10 +166,11 @@ void maintain(Store& store, db::Database& db, const Maintenance& maintenance,
                 using namespace sqlite_orm;
 
                 size_t removed{};
-                for (auto& cache :
-                     db.iterate<db::Cache>(where(c(&db::Cache::deleted) == false),
-                                           multi_order_by(order_by(&db::Cache::lastUsed),
-                                                          order_by(&db::Cache::created)))) {
+                // Evict by effective last activity; never-used caches (lastUsed == -1)
+                // fall back to their creation time.
+                for (auto& cache : db.iterate<db::Cache>(
+                         where(c(&db::Cache::deleted) == false),
+                         order_by(detail::effectiveLastUse()))) {
                     removed += removeCache(cache, db, toDelete, logger);
                     if (removed > overflow) break;
                 }
